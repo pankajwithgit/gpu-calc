@@ -230,10 +230,6 @@ export default function QuickEstimate() {
 
   const resetToDefaults = () => applyPreset(DEFAULT_WORKLOAD);
 
-  // Live pricing from Cloudflare Worker
-  const [livePricing, setLivePricing] = React.useState<Record<string, number>>({});
-
-  // Add loading state
   const [isCalculating, setIsCalculating] = React.useState(false);
 
   // Fetch HF config when model changes
@@ -351,34 +347,6 @@ export default function QuickEstimate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calcTrigger]);
 
-  // Fetch live pricing from Cloudflare Worker
-  React.useEffect(() => {
-    const fetchPricing = async () => {
-      try {
-        const response = await fetch('/api/gpus?live_pricing=true');
-        const data = await response.json();
-
-        if (data.status === 'success' && data.data?.gpus) {
-          const pricing: Record<string, number> = {};
-          data.data.gpus.forEach((gpu: any) => {
-            if (gpu.live_pricing?.onDemand?.median) {
-              pricing[gpu.name] = gpu.live_pricing.onDemand.median;
-            }
-          });
-          setLivePricing(pricing);
-          console.log('✅ Loaded live pricing for', Object.keys(pricing).length, 'GPUs');
-          console.log('📊 Live pricing data:', pricing);
-        }
-      } catch (error) {
-        console.error('Failed to fetch live pricing:', error);
-      }
-    };
-
-    fetchPricing();
-    const REFRESH_MS = 5 * 60 * 1000; // refresh live pricing every 5 minutes
-    const interval = setInterval(fetchPricing, REFRESH_MS);
-    return () => clearInterval(interval);
-  }, []);
 
   // Check if user has seen the tour before
   React.useEffect(() => {
@@ -505,15 +473,11 @@ export default function QuickEstimate() {
                         gpuLabel.includes('L40S') ? 'L40S' :
                         gpuLabel.includes('MI300X') ? 'MI300X' : gpuLabel;
 
-  // Resolve a cloud $/hr from the costings API (preferred provider → cheapest
-  // on-demand → cheapest spot), falling back to the legacy live-pricing worker.
   const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpu), preferredCloudProvider)
-  const workerRate = livePricing[gpuPricingKey] ?? null
-  const gpuPricePerHour: number | null = resolvedCloudRate?.rate ?? workerRate;
-  // Honest label for where the rate came from — never assume a provider.
+  const gpuPricePerHour: number | null = resolvedCloudRate?.rate ?? null;
   const cloudRateLabel = resolvedCloudRate
     ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
-    : (workerRate != null ? 'live rate' : '');
+    : '';
 
   const realMonthlyCost = testResult && gpuPricePerHour != null ?
     realGpuCount * gpuPricePerHour * HOURS_PER_MONTH :

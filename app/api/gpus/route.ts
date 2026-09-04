@@ -7,7 +7,6 @@ import { GpuCatalogQuerySchema } from '@/lib/api/schemas'
 import { ApiErrors } from '@/lib/api/errors'
 import { formatGpuCatalogResponse } from '@/lib/api/responses'
 import type { GpuSpec } from '@/lib/gpu-math/gpus'
-import { fetchGPUPricing, aggregateGPUPricing } from '@/lib/api/cloudflare'
 
 // AIConfigurator /systems response schema
 interface AicSystem {
@@ -36,7 +35,6 @@ export async function GET(req: NextRequest) {
     const maxPrice = searchParams.get('max_price')
     const vendor = searchParams.get('vendor')
     const sort = searchParams.get('sort')
-    const includeLivePricing = searchParams.get('live_pricing') === 'true'
 
     if (minMem) query.min_memory = minMem
     if (maxPrice) query.max_price = maxPrice
@@ -96,66 +94,15 @@ export async function GET(req: NextRequest) {
       } as GpuSpec
     })
 
-    // Optionally enrich with live pricing from Cloudflare Worker
-    if (includeLivePricing) {
-      try {
-        console.log('[GPUs API] Fetching live pricing from Cloudflare Worker...')
-        const cloudflareData = await fetchGPUPricing()
-        console.log(`[GPUs API] Received ${cloudflareData.prices.length} prices from Cloudflare`)
-
-        // Enrich each GPU with live pricing
-        filteredGpus = filteredGpus.map(gpu => {
-          // Extract GPU model from name (e.g., "NVIDIA H100 SXM" → "H100")
-          const gpuModel = gpu.name.replace('NVIDIA ', '').split(' ')[0]
-
-          // Find matching prices from Cloudflare
-          const matchingPrices = cloudflareData.prices.filter(p =>
-            p.gpu === gpuModel &&
-            p.vram_gb === gpu.vramGb
-          )
-
-          console.log(`[GPUs API] ${gpu.name}: Found ${matchingPrices.length} matching prices`)
-
-          if (matchingPrices.length === 0) {
-            return gpu
-          }
-
-          // Aggregate on-demand and spot pricing
-          const onDemandPricing = aggregateGPUPricing(matchingPrices, 'on_demand')
-          const spotPricing = aggregateGPUPricing(matchingPrices, 'spot')
-
-          console.log(`[GPUs API] ${gpu.name}: on-demand count=${onDemandPricing.count}, spot count=${spotPricing.count}`)
-
-          // Update pricePerHour with live pricing if available
-          const livePrice = onDemandPricing.median ?? spotPricing.median ?? gpu.pricePerHour
-
-          return {
-            ...gpu,
-            pricePerHour: livePrice,
-            livePricing: {
-              onDemand: onDemandPricing.count > 0 ? onDemandPricing : undefined,
-              spot: spotPricing.count > 0 ? spotPricing : undefined,
-              lastUpdated: cloudflareData.timestamp
-            }
-          }
-        })
-      } catch (cloudflareError) {
-        // Log error but continue with default pricing
-        console.error('[GPUs API] Failed to fetch live pricing from Cloudflare:', cloudflareError)
-      }
-    }
 
     // Filter by min_memory
     if (validatedQuery.min_memory) {
       filteredGpus = filteredGpus.filter(gpu => gpu.vramGb >= validatedQuery.min_memory!)
     }
 
-    // Filter by max_price (use live pricing median if available, fallback to static)
+    // Filter by max_price
     if (validatedQuery.max_price) {
-      filteredGpus = filteredGpus.filter(gpu => {
-        const effectivePrice = gpu.livePricing?.onDemand?.median ?? gpu.pricePerHour
-        return effectivePrice <= validatedQuery.max_price!
-      })
+      filteredGpus = filteredGpus.filter(gpu => gpu.pricePerHour <= validatedQuery.max_price!)
     }
 
     // Filter by vendor
@@ -172,11 +119,7 @@ export async function GET(req: NextRequest) {
         filteredGpus.sort((a, b) => b.vramGb - a.vramGb)
         break
       case 'price':
-        filteredGpus.sort((a, b) => {
-          const priceA = a.livePricing?.onDemand?.median ?? a.pricePerHour
-          const priceB = b.livePricing?.onDemand?.median ?? b.pricePerHour
-          return priceA - priceB
-        })
+        filteredGpus.sort((a, b) => a.pricePerHour - b.pricePerHour)
         break
       case 'performance':
         filteredGpus.sort((a, b) => b.tflops - a.tflops)
