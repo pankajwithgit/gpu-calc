@@ -99,7 +99,8 @@ function friendlyErrorTitle(code: string | null): string {
 function friendlyErrorMessage(code: string | null, raw: string): string {
   switch (code) {
     case 'AIC_TIMEOUT':
-      return 'The sizing engine took too long to respond. This can happen with very large models or complex configurations.';
+    case 'NETWORK_ERROR':
+      return 'The AIConfigurator service took too long to respond. This can happen with complex configurations.';
     case 'AIC_NO_CONFIGURATION':
       return 'No valid GPU configuration found for this model and hardware combination.';
     case 'AIC_UNAVAILABLE':
@@ -110,8 +111,6 @@ function friendlyErrorMessage(code: string | null, raw: string): string {
       return 'The sizing engine returned an unexpected response format.';
     case 'INVALID_REQUEST':
       return 'Some input values are missing or invalid. Please check your model name and parameters.';
-    case 'NETWORK_ERROR':
-      return 'Could not connect to the sizing service. Please check your internet connection.';
     default:
       return raw;
   }
