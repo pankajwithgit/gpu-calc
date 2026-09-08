@@ -21,8 +21,8 @@ dependencies = [
     # shadow the fork's numpy>=2.1,<3 build and make resolution impossible. A direct
     # URL forces pip to install these exact artifacts. Bump both URLs together (the
     # version + build hash live in the tag) for a new SDK; see docs/RELEASE_PROCESS.md.
-    "aiconfigurator @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.11.0%2B5b0ee59e/aiconfigurator-0.11.0-py3-none-any.whl",
-    "aiconfigurator-core @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.11.0%2B5b0ee59e/aiconfigurator_core-0.11.0-cp311-abi3-manylinux_2_28_x86_64.whl",
+    "aiconfigurator @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.12.0%2B79e96644/aiconfigurator-0.12.0-py3-none-any.whl",
+    "aiconfigurator-core @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.12.0%2B79e96644/aiconfigurator_core-0.12.0-cp311-abi3-manylinux_2_28_x86_64.whl",
     "plotext>=5.3.2,<6",
 ]
 

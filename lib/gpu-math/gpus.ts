@@ -36,23 +36,4 @@ export interface GpuSpec {
   powerWatts: number
   cloudAvailabilityPct: number
   tpuAvailabilityPct: number
-
-  // Live pricing from Cloudflare Worker (optional - populated at runtime)
-  livePricing?: {
-    onDemand?: {
-      min: number | null
-      median: number | null
-      max: number | null
-      count: number
-      providers: Array<{ provider: string; price_per_gpu: number; region: string }>
-    }
-    spot?: {
-      min: number | null
-      median: number | null
-      max: number | null
-      count: number
-      providers: Array<{ provider: string; price_per_gpu: number; region: string }>
-    }
-    lastUpdated: string
-  }
 }

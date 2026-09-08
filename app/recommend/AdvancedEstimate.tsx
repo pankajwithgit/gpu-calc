@@ -99,7 +99,8 @@ function friendlyErrorTitle(code: string | null): string {
 function friendlyErrorMessage(code: string | null, raw: string): string {
   switch (code) {
     case 'AIC_TIMEOUT':
-      return 'The sizing engine took too long to respond. This can happen with very large models or complex configurations.';
+    case 'NETWORK_ERROR':
+      return 'The AIConfigurator service took too long to respond. This can happen with complex configurations.';
     case 'AIC_NO_CONFIGURATION':
       return 'No valid GPU configuration found for this model and hardware combination.';
     case 'AIC_UNAVAILABLE':
@@ -110,8 +111,6 @@ function friendlyErrorMessage(code: string | null, raw: string): string {
       return 'The sizing engine returned an unexpected response format.';
     case 'INVALID_REQUEST':
       return 'Some input values are missing or invalid. Please check your model name and parameters.';
-    case 'NETWORK_ERROR':
-      return 'Could not connect to the sizing service. Please check your internet connection.';
     default:
       return raw;
   }
@@ -170,9 +169,6 @@ export default function AdvancedEstimate() {
 
   // Additional constraints accordion
   const [expanded, setExpanded] = React.useState<string[]>(['perf']);
-
-  // Live pricing
-  const [livePricing, setLivePricing] = React.useState<Record<string, number>>({});
 
   const [islInput, setIslInput] = React.useState('2048');
   const [oslInput, setOslInput] = React.useState('128');
@@ -255,25 +251,6 @@ export default function AdvancedEstimate() {
   }, [model, hfToken, MODEL_OPTIONS, catalogLoading, hydrated]);
 
   // Fetch live pricing
-  React.useEffect(() => {
-    const fetchPricing = async () => {
-      try {
-        const res = await fetch('/api/gpus?live_pricing=true');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data?.data?.gpus) return;
-        const prices: Record<string, number> = {};
-        for (const g of data.data.gpus) {
-          if (g.live_pricing?.onDemand?.median) {
-            const shortName = g.name.replace(/NVIDIA\s+/i, '').replace(/AMD\s+/i, '').split(' ')[0];
-            prices[shortName] = g.live_pricing.onDemand.median;
-          }
-        }
-        setLivePricing(prices);
-      } catch { /* ignore */ }
-    };
-    fetchPricing();
-  }, []);
 
   const currentGpuOption = aicGpus.find(g => g.systemId === gpuSystem) ?? aicGpus[0] ?? null;
 
@@ -311,18 +288,12 @@ export default function AdvancedEstimate() {
   const tpsVal = useCountUp(result?.throughput.tokensPerSecond ?? 0, 750, 0);
   const memVal = useCountUp(result?.memory.value ?? 0, 750, 1);
 
-  // Cost calculations. Prefer a live cloud rate from the costings API (same
-  // resolver the Performance page uses), then the legacy pricing worker, then an
-  // amortized hardware cost so a GPU with a known price still shows an estimate.
-  const gpuShortName = (currentGpuOption?.label ?? '').replace(/NVIDIA\s+/i, '').replace(/AMD\s+/i, '').split(' ')[0];
-  const livePrice = livePricing[gpuShortName];
   const hwCost = costings.gpuHardwareCosts.get(gpuSystem)?.new_usd ?? null;
   const amortizedHwPerHour = hwCost != null ? hwCost / (AMORT_MONTHS_3YR * HOURS_PER_MONTH) : null;
   const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpuSystem), preferredCloudProvider);
-  const pricePerHour = resolvedCloudRate?.rate ?? livePrice ?? amortizedHwPerHour ?? null;
+  const pricePerHour = resolvedCloudRate?.rate ?? amortizedHwPerHour ?? null;
   const rateBasis = resolvedCloudRate
     ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
-    : livePrice != null ? 'live rate'
     : amortizedHwPerHour != null ? 'amortized hardware'
     : '';
   const numGpus = result?.recommendation.totalGpus ?? 0;
