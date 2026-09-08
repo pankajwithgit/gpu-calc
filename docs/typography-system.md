@@ -193,7 +193,7 @@ white-space: nowrap;
 ### **Page Title**
 ```tsx
 <Title headingLevel="h1" className="type-page-title">
-  Quick estimate
+  Performance
 </Title>
 ```
 
@@ -278,7 +278,7 @@ white-space: nowrap;
 - ✅ Set base font-size to 15px, line-height 1.5
 - ✅ Added `font-variant-numeric: tabular-nums` to numeric displays
 
-### **`app/quick-estimate/page.tsx`**
+### **`app/performance/page.tsx`**
 - ✅ Page title: Uses `.type-page-title` (26px Display 500)
 - ✅ Section titles: Use `.type-section-title` (16px Display 600)
 - ✅ Body text: Uses `.type-body` (14px Sans 400)
@@ -299,7 +299,7 @@ white-space: nowrap;
    - Set 15px base with 1.5 line-height
    - Added tabular-nums support
 
-2. **`app/quick-estimate/page.tsx`**
+2. **`app/performance/page.tsx`**
    - Replaced all inline font styles with utility classes
    - Applied color tokens (`var(--text)`, `var(--text-2)`, etc.)
    - Used semantic class names instead of magic numbers
@@ -343,11 +343,11 @@ white-space: nowrap;
 
 ## **Testing**
 
-Visit: **http://localhost:3003/quick-estimate**
+Visit: **http://localhost:3003/performance**
 
 ### **Check:**
 
-1. ✅ **Page title**: 26px "Quick estimate"
+1. ✅ **Page title**: 26px "Performance"
 2. ✅ **Section headings**: 16px bold
 3. ✅ **Hero card number**: 80px white on dark
 4. ✅ **Supporting numbers**: 32px on white

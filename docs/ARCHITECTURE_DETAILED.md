@@ -24,8 +24,8 @@ This document provides comprehensive component diagrams, data flow visualization
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌──────────────────────┐        ┌──────────────────────┐     │
-│  │  Quick Estimate Page │        │ Shared Components    │     │
-│  │  app/quick-estimate/ │◄───────┤ components/          │     │
+│  │  Performance Page    │        │ Shared Components    │     │
+│  │  app/performance/    │◄───────┤ components/          │     │
 │  │                      │        │ - ProductTour        │     │
 │  │  - Model input       │        │ - FlipTile           │     │
 │  │  - GPU selector      │        │ - Term (glossary)    │     │
@@ -195,7 +195,7 @@ The core calculation engine that determines GPU requirements.
 
 ---
 
-## Data Flow - Quick Estimate Page
+## Data Flow - Performance Page
 
 Shows how data flows from user input through calculations to display.
 
@@ -209,8 +209,8 @@ Shows how data flows from user input through calculations to display.
      │
      ▼
 ┌─────────────────────────────────────────┐
-│  Quick Estimate UI                      │
-│  (QuickEstimate.tsx)                    │
+│  Performance UI                         │
+│  (PerformanceEstimate.tsx)              │
 │                                         │
 │  React State:                           │
 │  - model = "meta-llama/..."             │
@@ -297,8 +297,16 @@ Shows how data flows from user input through calculations to display.
 
 ## Module Dependencies
 
+> **Stale**: this diagram describes the pre-REST-API client-side compute
+> pipeline. None of the referenced modules below (`core.ts`, `validation.ts`,
+> `quantization.ts`, `tensor-parallel.ts`, `vllm-defaults.ts`, `bottleneck.ts`,
+> `parallelism.ts`, `llmd.ts`, `gpu-catalog.json`, `models.ts`) exist anymore —
+> GPU math now runs through the AIConfigurator REST API via `lib/api/`
+> ([see AGENTS.md](../AGENTS.md#critical-rules)). This section needs a full
+> rewrite, not a rename.
+
 ```
-QuickEstimate.tsx
+PerformanceEstimate.tsx
     │
     ├─→ computeInferenceConfig (from core.ts)
     │       │
@@ -327,7 +335,7 @@ QuickEstimate.tsx
 
 | Component | File | Responsibility | Status |
 |-----------|------|----------------|--------|
-| **QuickEstimate** | `app/quick-estimate/QuickEstimate.tsx` | Main page, state management, orchestrates all other components | ✅ Active |
+| **PerformanceEstimate** | `app/performance/PerformanceEstimate.tsx` | Main page, state management, orchestrates all other components | ✅ Active |
 | **FlipTile** | `quickEstimateHelpers.tsx` | Interactive card that flips to show formulas on click/Enter | ✅ Complete |
 | **ProductTour** | `components/ProductTour/ProductTour.tsx` | Guided tour with spotlight and tooltips | ✅ Complete |
 | **Term** | `quickEstimateHelpers.tsx` | Glossary popover (? icon with explanation) | ✅ Complete |
@@ -362,7 +370,7 @@ QuickEstimate.tsx
 
 ```
 ┌───────────────────────────────────────────────────────┐
-│  Quick Estimate Page                                  │
+│  Performance Page                                     │
 │                                                       │
 │  ┌─────────────────────────────────────────────┐    │
 │  │  🧪 Test Panel (Blue Box)                    │    │
@@ -393,7 +401,7 @@ QuickEstimate.tsx
 
 ```
 ┌───────────────────────────────────────────────────────┐
-│  Quick Estimate Page                                  │
+│  Performance Page                                     │
 │                                                       │
 │  ┌─────────────────────────────────────────────┐    │
 │  │  Workload Controls                           │    │

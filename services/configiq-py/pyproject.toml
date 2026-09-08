@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "configiq"
+version = "0.1.0"
+description = "Shared Python utilities for ConfigIQ backend services (systems catalog, OpenTelemetry, MCP)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+# The base package is intentionally dependency-free: `configiq.systems` is
+# stdlib-only and lazy-imports the aiconfigurator SDK / pyarrow, which the
+# consuming service declares. Observability machinery lives behind extras.
+dependencies = []
+
+[project.optional-dependencies]
+# Import `configiq.otel` / `configiq.metrics` / `configiq.observability`.
+otel = [
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-requests",
+    "opentelemetry-instrumentation-urllib3",
+    "opentelemetry-exporter-prometheus",
+    "prometheus-client",
+    "psutil",
+]
+# Import `configiq.mcp`.
+mcp = [
+    "fastapi-mcp",
+    "mcp<2.0",  # required for fastapi-mcp compatibility
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["configiq"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Blind `except Exception` is deliberate: the perf-data parquet reads and the
+# psutil metric callbacks are strictly best-effort and must degrade gracefully.
+ignore = ["BLE001"]

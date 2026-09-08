@@ -4,7 +4,8 @@ import * as React from 'react'
 import { Switch, FormSelect, FormSelectOption } from '@patternfly/react-core'
 import { useCountUp } from '@/app/performance/quickEstimateHelpers'
 import { FRONTIER_MODELS } from '@/lib/pricing/frontier-models'
-import { getCloudRate, getOwnedRate } from '@/lib/pricing/gpu-rates'
+import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings'
+import { useSettings } from '@/contexts/SettingsContext'
 import { DEFAULT_TIERS } from '@/lib/routing/tier-defaults'
 import { type TierState, computeAllTiers, computeCostVolumePoints, findBreakeven } from '@/lib/routing/calc'
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog'
@@ -63,8 +64,9 @@ export default function RoutingEconomics() {
   const [compareOpen, setCompareOpen] = React.useState(false)
   const [flipped, setFlipped] = React.useState<Record<string, boolean>>({})
   const [tiers, setTiers] = React.useState<TierState[]>(initTiers)
-  const [livePricing, setLivePricing] = React.useState<Record<string, number>>({})
   const { modelOptions: aicModels, gpuOptions: aicGpus } = useAicCatalog()
+  const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings()
+  const costings = useCostings(costingsEnabled, pricingSource)
 
   const OPEN_MODELS = React.useMemo(() => aicModels.map(id => ({
     id,
@@ -74,28 +76,16 @@ export default function RoutingEconomics() {
     ['Meta', 'Mistral', 'Google', 'Qwen', 'DeepSeek', 'NVIDIA', 'MiniMax', 'Moonshot'].includes(m.vendor)
   ), [aicModels])
 
-  React.useEffect(() => {
-    const fetchPricing = async () => {
-      try {
-        const response = await fetch('/api/gpus?live_pricing=true')
-        const data = await response.json()
-        if (data.status === 'success' && data.data?.gpus) {
-          const pricing: Record<string, number> = {}
-          data.data.gpus.forEach((gpu: { name: string; live_pricing?: { onDemand?: { median?: number } } }) => {
-            if (gpu.live_pricing?.onDemand?.median) {
-              pricing[gpu.name] = gpu.live_pricing.onDemand.median
-            }
-          })
-          setLivePricing(pricing)
-        }
-      } catch { /* no live pricing available */ }
-    }
-    fetchPricing()
-  }, [])
 
   const getRate = React.useCallback(
-    (gpuId: string) => mode === 'cloud' ? getCloudRate(gpuId, livePricing) : getOwnedRate(gpuId),
-    [mode, livePricing],
+    (gpuId: string): number | null => {
+      if (mode === 'cloud') {
+        const resolved = resolveCloudRate(costings.gpuCloudRates.get(gpuId), preferredCloudProvider)
+        return resolved?.rate ?? null
+      }
+      return null
+    },
+    [mode, costings.gpuCloudRates, preferredCloudProvider],
   )
 
   const result = React.useMemo(

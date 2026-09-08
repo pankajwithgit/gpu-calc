@@ -2,16 +2,19 @@
 
 LLM inference sizing, GPU comparison, and cost modeling for engineers and infrastructure teams.
 
-**Live at [configiq.dev](https://configiq.dev)**
+## Live
 
-Built with Next.js + PatternFly, powered by the [AIConfigurator](https://github.com/ai-dynamo/aiconfigurator) [REST API](https://aiconfigurator.dev/docs).
+- [configiq.xyz](https://configiq.xyz) (latest release)
+- [configiq.dev](https://configiq.dev) (latest commit)
+
+Built with Next.js + PatternFly, powered by our [AIConfigurator](https://github.com/ai-dynamo/aiconfigurator) [REST API](https://aiconfigurator.dev/docs).
 
 ## What it does
 
 | Tool | Description |
 |------|-------------|
-| **Quick Estimate** | Fast GPU memory and cost estimate from model + load profile |
-| **Advanced Calculator** | Detailed sizing with batching, quantization, and cost modeling |
+| **Performance** | Fast GPU memory and cost estimate from model + load profile |
+| **Recommend Sizing** | Detailed sizing with batching, quantization, and cost modeling |
 | **KV Cache Calculator** | Memory breakdown and KV cache capacity analysis |
 | **GPU Explorer** | Compare GPUs across memory, throughput, cost, and availability |
 | **Hybrid Savings** | Model cost savings across cloud, on-premise, and hybrid strategies |
@@ -59,25 +62,25 @@ npm run lint         # ESLint
 app/                  Next.js App Router pages
   layout.tsx          Root layout, fonts, PatternFly CSS imports
   page.tsx            Homepage
-  quick-estimate/     Quick Estimate tool
-  calculator/         Advanced Calculator
+  recommend/          Recommend sizing tool
   kv-cache/           KV Cache Calculator
+  performance/        Performance estimates
   gpu-explorer/       GPU Explorer
   hybrid-savings/     Hybrid Savings
   routing/            Routing Economics
+  settings/           App settings
   api/                Next.js API routes (proxy to REST APIs)
     recommend/        POST — GPU sizing via AIC /recommend
     estimate/         POST — GPU performance via AIC /estimate
     memory/           POST — memory breakdown via AIC /memory
-    models/           GET — model catalog via AIC /models
-    gpus/             GET — GPU catalog via AIC /systems + optional live Cloudflare pricing
+    gpus/             GET — GPU catalog via AIC /systems
+    hf-config/        GET — Hugging Face model config lookup
+    health/           GET — health check
 components/
   layout/
     AppShell.tsx      Top-nav masthead + sidebar navigation
 lib/
-  gpu-math/           Historical GPU sizing (client-side)
   api/                AIConfigurator API clients
-  pricing/            Cloud GPU pricing data
 docs/                 Architecture docs and ADRs
 ```
 
@@ -95,7 +98,8 @@ npm run build        # Must succeed
 
 ### Code conventions
 
-1. **GPU math belongs in `AIConfigurator`** — never write sizing formulas inside React components.
+1. **GPU math belongs in `aiconfigurator`** — never write sizing formulas inside React components.
+1. **Pricing belongs in the `aicostings` service** — never add costing inside React components.
 2. **PatternFly only** — do not add Tailwind, shadcn/ui, or any other component library.
 3. **Sentence case everywhere** — no title case in headings or labels.
 4. **Server components by default** — add `"use client"` only when needed.

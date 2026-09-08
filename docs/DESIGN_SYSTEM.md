@@ -668,4 +668,4 @@ Before shipping a new page/component:
 
 ---
 
-**Summary**: This design system prioritizes readability, consistency, and accessibility. Every pattern here has been battle-tested in the Quick Estimate page. Use these guidelines as the foundation for all new pages — don't invent new patterns unless there's a clear gap.
+**Summary**: This design system prioritizes readability, consistency, and accessibility. Every pattern here has been battle-tested in the Performance page. Use these guidelines as the foundation for all new pages — don't invent new patterns unless there's a clear gap.

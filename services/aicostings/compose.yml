@@ -1,0 +1,24 @@
+services:
+  valkey:
+    image: registry.redhat.io/rhel9/valkey-8
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      # Context is the parent services/ dir so the build can pull in the shared
+      # configiq-py package alongside this service.
+      context: ..
+      dockerfile: aicostings/Containerfile
+    ports:
+      - "8080:8080"
+    environment:
+      VALKEY_URL: valkey://valkey:6379/0
+    depends_on:
+      valkey:
+        condition: service_healthy

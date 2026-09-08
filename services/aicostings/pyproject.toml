@@ -1,0 +1,70 @@
+[project]
+name = "aicostings"
+version = "0.1.0"
+description = "GPU and LLM pricing API for AI infrastructure cost modelling"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.0",
+    "aiohttp>=3.10",
+    # Streaming JSON parser for the large AWS Price List bulk offer files.
+    "ijson>=3.2",
+    "valkey>=6.0",
+    # 3.x API (AsyncIOScheduler + add_job); 4.x is an incompatible rewrite.
+    "apscheduler>=3.10,<4",
+    "pyyaml>=6.0",
+    "orjson>=3.10",
+    # Shared ConfigIQ utilities (systems catalog, observability, MCP wiring).
+    "configiq",
+    # GPU system catalog + vendor display names come from the aiconfigurator SDK
+    # (via configiq.systems) so aicostings and aiconfigurator never drift; pyarrow
+    # reads the SDK's bundled perf-data parquet for the display names. The SDK + its
+    # Rust-compiled core are consumed as wheels from the Red Hat fork's GitHub
+    # Release, NOT vendored. Referenced by exact download URL (not name==version)
+    # because NVIDIA publishes the same 0.11.0 on PyPI with an incompatible
+    # numpy~=1.26.4 pin that would otherwise shadow the fork's numpy>=2.1,<3 build;
+    # a direct URL forces pip to install these exact artifacts. Keep these URLs
+    # identical to the aiconfigurator service and bump both together; see
+    # docs/RELEASE_PROCESS.md.
+    "aiconfigurator @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.11.0%2B5b0ee59e/aiconfigurator-0.11.0-py3-none-any.whl",
+    "aiconfigurator-core @ https://github.com/redhat-performance/aiconfigurator/releases/download/deploy-api-v0.11.0%2B5b0ee59e/aiconfigurator_core-0.11.0-cp311-abi3-manylinux_2_28_x86_64.whl",
+    "pyarrow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.8",
+]
+
+# Opt-in observability + MCP, both provided by the shared configiq package. Kept
+# out of the base install (and enabled explicitly in the container) because otel
+# tracing initializes an OTLP exporter eagerly at import; the app's guarded
+# imports light up /metrics, tracing, and the MCP server only when present.
+otel = ["configiq[otel]"]
+mcp = ["configiq[mcp]"]
+
+# configiq is developed in-tree as a path dependency so local edits are picked up
+# without reinstalling. The container build (context = services/) installs it
+# from ./configiq-py before this service.
+[tool.uv.sources]
+configiq = { path = "../configiq-py", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Blind `except Exception` is deliberate here: per-provider scrapers degrade
+# gracefully (one failing provider must not abort the batch) and the psutil
+# metric callbacks are strictly best-effort.
+ignore = ["BLE001"]

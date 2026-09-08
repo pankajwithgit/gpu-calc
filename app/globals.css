@@ -508,3 +508,8 @@ code, pre, .pf-v5-u-font-family-mono {
   color: var(--text-3);
   white-space: nowrap;
 }
+
+/* PatternFly Switch — match page font size so labels feel native */
+.pf-v5-c-switch__label {
+  font-size: 13px;
+}

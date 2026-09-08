@@ -99,26 +99,21 @@ export function useAicCatalog(): AicCatalog {
     fetchPromise = null  // reset so stale cache triggers a fresh fetch
 
     let cancelled = false
-    const aicUrl = process.env.NEXT_PUBLIC_AICONFIGURATOR_API_URL || 'https://aiconfigurator.dev'
 
     async function fetchCatalog() {
       if (!fetchPromise) {
         fetchPromise = (async () => {
-          const [systemsRes, modelsRes] = await Promise.all([
-            fetch(`${aicUrl}/systems?include=specs`),
-            fetch(`${aicUrl}/models?include=specs`),
-          ])
+          // Same-origin proxy (app/api/catalog) resolves the per-host gateway
+          // server-side, so no build-time NEXT_PUBLIC_AICONFIGURATOR_API_URL.
+          const res = await fetch('/api/catalog')
+          if (!res.ok) throw new Error(`Catalog fetch failed (${res.status})`)
 
-          if (!systemsRes.ok) throw new Error(`Systems fetch failed (${systemsRes.status})`)
-          if (!modelsRes.ok) throw new Error(`Models fetch failed (${modelsRes.status})`)
+          const data = await res.json()
 
-          const systemsData = await systemsRes.json()
-          const modelsData = await modelsRes.json()
-
-          const systems = (systemsData.systems ?? []) as Record<string, unknown>[]
+          const systems = (data.systems ?? []) as Record<string, unknown>[]
           const gpus = systems.map(mapSystem)
 
-          const rawModels = (modelsData.models ?? []) as unknown[]
+          const rawModels = (data.models ?? []) as unknown[]
           const modelList: string[] = []
           const specsMap = new Map<string, ModelSpec>()
           for (const m of rawModels) {

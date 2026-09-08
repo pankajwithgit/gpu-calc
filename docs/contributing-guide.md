@@ -1,6 +1,6 @@
 # Contributing guide
 
-This document covers everything you need to start contributing to GPUCalc alongside other engineers.
+This document covers everything you need to start contributing to ConfigIQ alongside other engineers.
 
 ## 1. Getting access
 
@@ -50,8 +50,8 @@ If port 3000 is in use, Next.js will move to 3001. Check the terminal output for
 app/                    Next.js App Router pages
   layout.tsx            Root layout — fonts, PatternFly CSS imports
   page.tsx              Homepage
-  quick-estimate/       Quick Estimate tool (the main page)
-  calculator/           Advanced Calculator (stub)
+  performance/          Performance tool (the main page)
+  recommend/            Recommend sizing tool (stub)
   gpu-explorer/         GPU Explorer (stub)
   hybrid-savings/       Hybrid Savings (stub)
   routing/              Routing Economics (stub)
@@ -67,7 +67,7 @@ lib/
     memory.ts           Memory estimation formulas
     throughput.ts       Throughput estimation formulas
     cost.ts             Cost modeling formulas
-    quick-estimate.ts   Calculation engine for the Quick Estimate page
+    quick-estimate.ts   Calculation engine for the Performance page
   utils/
     format.ts           Number and unit formatting helpers
 
@@ -112,7 +112,7 @@ Prefixes: `feature/` for new functionality, `fix/` for bug fixes, `chore/` for m
 Pre-commit hooks run automatically when you `git commit`. They check lint and types on staged files and block the commit if anything fails — fix the error and try again.
 
 ```bash
-git add app/quick-estimate/page.tsx
+git add app/performance/page.tsx
 git commit -m "Add GPU memory breakdown chart to estimate panel"
 ```
 
@@ -163,7 +163,7 @@ Two engineers working at the same time will sometimes touch the same files. The 
 | File | Why it conflicts |
 |---|---|
 | `app/globals.css` | All shared CSS lives here |
-| `app/quick-estimate/page.tsx` | Large file, most active page |
+| `app/performance/page.tsx` | Large file, most active page |
 | `lib/gpu-math/models.ts` | Both engineers may add models |
 | `package.json` | Dependency changes |
 

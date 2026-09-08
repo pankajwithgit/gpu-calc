@@ -6,9 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+# CI only reads the checked-out source; no write scopes needed.
+permissions:
+  contents: read
+
+# No path filters on any job: every push/PR checks all three components, matching
+# the "release in unison" model of the build workflow.
 jobs:
   check:
-    name: Type-check, lint, and build
+    name: Frontend — type-check, lint, and build
     runs-on: ubuntu-latest
 
     steps:
@@ -30,3 +36,66 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  aiconfigurator:
+    name: aiconfigurator API — lint and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        working-directory: services/aiconfigurator
+        run: uv sync --extra otel --extra mcp
+
+      - name: Lint
+        working-directory: services/aiconfigurator
+        run: uv run ruff check .
+
+      - name: Test
+        working-directory: services/aiconfigurator
+        run: uv run pytest
+
+  aicostings:
+    name: aicostings API — lint and test
+    runs-on: ubuntu-latest
+
+    # The API tests exercise the FastAPI endpoints against a real Valkey store.
+    services:
+      valkey:
+        image: valkey/valkey:8
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      VALKEY_URL: valkey://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        working-directory: services/aicostings
+        run: uv sync --extra dev --extra otel --extra mcp
+
+      - name: Lint
+        working-directory: services/aicostings
+        run: uv run ruff check .
+
+      - name: Test
+        working-directory: services/aicostings
+        run: uv run pytest

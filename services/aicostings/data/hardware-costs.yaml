@@ -1,0 +1,85 @@
+# GPU hardware purchase prices (USD).
+# Sources: Kevin Cogan (LLM-Cost-Estimator/lib/catalog.ts), Exxact, Thinkmate, Dell, GSA schedules.
+# new_usd: per-GPU indicative enterprise price (sourced, dated, requires quote for final decision).
+# new_node_usd: full 8-GPU node price where available.
+# indicative: true — no authoritative public source; enterprise pricing is quote-only.
+# Updated: 2026-08-01 (Kevin's source dates)
+
+systems:
+  - id: h200_sxm
+    new_usd: 33750       # $270K / 8 GPUs (Exxact + GSA 8-GPU H200 system)
+    new_usd_low: 31250   # $250K / 8
+    new_usd_high: 36250  # $290K / 8
+    new_node_usd: 270000
+    used_usd: null
+    install_cost_node: 18900
+    source_label: "Exxact and GSA eight-GPU H200 system prices"
+    source_url: "https://www.exxactcorp.com/Exxact-TS4-118380266-E118380266"
+    source_date: "2026-08-01"
+    tdp_watts: 700
+    gpus_per_node: 8
+
+  - id: h100_sxm
+    new_usd: 39750       # $318K / 8 GPUs (Exxact HGX H100)
+    new_usd_low: 35000   # $280K / 8
+    new_usd_high: 42500  # $340K / 8
+    new_node_usd: 318000
+    used_usd: 18000
+    install_cost_node: 22300
+    source_label: "Exxact eight-GPU HGX H100 configured system price"
+    source_url: "https://configurator.exxactcorp.com/configure/TS4-193475697"
+    source_date: "2026-08-01"
+    tdp_watts: 700
+    gpus_per_node: 8
+
+  - id: h100_pcie
+    new_usd: 28000
+    new_usd_low: 24000
+    new_usd_high: 32000
+    used_usd: 15000
+    source_label: "Market range for H100 PCIe cards"
+    source_date: "2026-08-01"
+    tdp_watts: 350
+    gpus_per_node: 8
+
+  - id: a100_sxm
+    new_usd: 14000
+    new_usd_low: 11000
+    new_usd_high: 17000
+    used_usd: 7000
+    source_label: "Market range for A100 80GB SXM cards"
+    source_date: "2026-08-01"
+    tdp_watts: 400
+    gpus_per_node: 8
+
+  - id: a100_pcie
+    new_usd: 11000
+    new_usd_low: 9000
+    new_usd_high: 13000
+    used_usd: 5500
+    source_label: "Market range for A100 80GB PCIe cards"
+    source_date: "2026-08-01"
+    tdp_watts: 300
+    gpus_per_node: 8
+
+  - id: l40s
+    new_usd: 8500
+    new_usd_low: 7500
+    new_usd_high: 10000
+    used_usd: 5000
+    source_label: "OEM and GPU-server reseller market range"
+    source_url: "https://www.thinkmate.com/systems/servers/gpx/a10"
+    source_date: "2026-08-01"
+    tdp_watts: 350
+    gpus_per_node: 8
+
+  - id: b200_sxm
+    new_usd: 55000
+    new_usd_low: 50000
+    new_usd_high: 65000
+    new_node_usd: 440000
+    used_usd: null
+    source_label: "Market range for B200 SXM systems"
+    source_date: "2026-08-01"
+    tdp_watts: 1000
+    gpus_per_node: 8

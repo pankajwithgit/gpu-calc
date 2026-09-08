@@ -1,10 +1,8 @@
 "use client";
 
-// TODO: Replace GPU_CATALOG with useAicCatalog() — vram, mem_bw, bf16_tflops, tdp_watts, and
-// gpus_per_node will all come from /systems?include=specs once bandwidth + TFLOPs are exposed.
-// TODO: Wire Costings REST API (to be designed) to restore cost-related axes and bubble-size
-// metric. All cost fields (hardware_cost_usd, tokens_per_dollar, pricePerHour) are disabled
-// until then.
+// Cost-related axes (hardware cost) and the cost-efficiency bubble-size metric are
+// driven by the costings API via useCostings, gated on the costingsEnabled setting.
+// Cloud pricing per provider is applied on the Sources page selection.
 
 import * as React from 'react';
 import {
@@ -21,6 +19,8 @@ import {
   Text
 } from "@patternfly/react-core";
 import { useAicCatalog, type GpuOption } from '@/lib/hooks/useAicCatalog';
+import { useSettings } from '@/contexts/SettingsContext';
+import { useCostings } from '@/lib/hooks/useCostings';
 import { GpuBubbleChart } from './GpuBubbleChart';
 import styles from './gpu-explorer.module.css';
 
@@ -42,6 +42,8 @@ export default function GpuExplorerPage() {
   const [yAxis, setYAxis] = React.useState<YAxis>('throughput-index');
   const [vendorFilter, setVendorFilter] = React.useState<'all' | 'nvidia' | 'amd'>('all');
   const { gpuOptions, isLoading } = useAicCatalog();
+  const { costingsEnabled, preferredCloudProvider, pricingSource } = useSettings();
+  const costings = useCostings(costingsEnabled, pricingSource);
 
   React.useEffect(() => {
     setMounted(true);
@@ -52,6 +54,27 @@ export default function GpuExplorerPage() {
     return gpu.vendor === vendorFilter;
   });
 
+  // Cost axes/preset are only meaningful once live hardware costs have loaded
+  // for the GPUs actually on screen; otherwise the 'price' axis is an all-zero
+  // column. Evaluate coverage over the current vendor-filtered set, not the
+  // global cost map, so e.g. filtering to a vendor with no priced GPUs disables
+  // the cost controls rather than plotting them all at zero.
+  const hasHardwareCosts = filteredGPUs.some(
+    gpu => (costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd ?? 0) > 0,
+  );
+  const costMetricsReady = costingsEnabled && hasHardwareCosts;
+
+  // If cost metrics become unavailable (costings off, or the displayed GPUs have
+  // no hardware costs) while a price axis or the cost-efficiency preset is
+  // active, fall back to safe defaults so the chart never shows an empty axis.
+  React.useEffect(() => {
+    if (!costMetricsReady) {
+      if (preset === 'cost-efficiency') setPreset('balanced');
+      setXAxis(prev => (prev === 'price' ? 'vram' : prev));
+      setYAxis(prev => (prev === 'price' ? 'throughput-index' : prev));
+    }
+  }, [costMetricsReady, preset]);
+
   const calculateThroughputIndex = (gpu: GpuOption) => {
     const multiplier = ARCH_MULTIPLIER[gpu.architecture ?? ''] ?? 1.0;
     const bwGbps = (gpu.bandwidthTbps ?? 0) * 1000;
@@ -59,10 +82,22 @@ export default function GpuExplorerPage() {
     return bwGbps * multiplier * (vram / 80);
   };
 
+  // Relative cost-efficiency metric: throughput index per $1k of hardware cost.
+  // Uses live hardware costs from the costings API; 0 when no cost is known so
+  // the bubble falls back to a minimum radius rather than skewing the scale.
+  const throughputPerKUsd = (gpu: GpuOption): number => {
+    const hw = costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd;
+    if (!hw || hw <= 0) return 0;
+    return calculateThroughputIndex(gpu) / (hw / 1000);
+  };
+
   const getAxisValue = (gpu: GpuOption, axis: XAxis | YAxis): number => {
     switch (axis) {
       case 'vram':            return gpu.vramGb ?? 0;
-      case 'price':           return 0; // pending Costings REST API
+      case 'price': {
+        const hw = costings.gpuHardwareCosts.get(gpu.systemId)
+        return hw?.new_usd ?? 0
+      }
       case 'throughput-index': return calculateThroughputIndex(gpu);
       case 'mem-bw':          return (gpu.bandwidthTbps ?? 0) * 1000;
       default:                return 0;
@@ -107,12 +142,15 @@ export default function GpuExplorerPage() {
   const allData = filteredGPUs.map(gpu => ({
     x: getAxisValue(gpu, xAxis),
     y: getAxisValue(gpu, yAxis),
-    size: gpu.tflopsBf16 ?? 0, // tokens_per_dollar disabled pending Costings REST API
+    // When costings is enabled and hardware costs are loaded, bubble size shows
+    // throughput per $1k of hardware cost; otherwise it falls back to BF16 TFLOPs.
+    size: costMetricsReady ? throughputPerKUsd(gpu) : (gpu.tflopsBf16 ?? 0),
     name: gpu.label.replace(/NVIDIA |AMD /i, ''),
     fullName: gpu.label,
     color: gpu.vendor === 'amd' ? '#c55a5a' : '#5b9bd5',
     vram: gpu.vramGb ?? 0,
-    // hwCost and tokensPerDollar omitted — restore from Costings REST API once available
+    hwCost: costings.gpuHardwareCosts.get(gpu.systemId)?.new_usd ?? undefined,
+    tokensPerDollar: throughputPerKUsd(gpu),
     memBW: (gpu.bandwidthTbps ?? 0) * 1000,
     architecture: gpu.architecture
       ? gpu.architecture.charAt(0).toUpperCase() + gpu.architecture.slice(1)
@@ -137,8 +175,8 @@ export default function GpuExplorerPage() {
                   Preset:
                 </Text>
                 <ToggleGroup>
-                  <ToggleGroupItem text="Balanced" isSelected={preset === 'balanced'} onChange={() => setPreset('balanced')} isDisabled />
-                  <ToggleGroupItem text="Cost efficiency" isSelected={preset === 'cost-efficiency'} onChange={() => setPreset('cost-efficiency')} isDisabled />
+                  <ToggleGroupItem text="Balanced" isSelected={preset === 'balanced'} onChange={() => setPreset('balanced')} />
+                  <ToggleGroupItem text="Cost efficiency" isSelected={preset === 'cost-efficiency'} onChange={() => setPreset('cost-efficiency')} isDisabled={!costMetricsReady} />
                   <ToggleGroupItem text="Performance" isSelected={preset === 'performance'} onChange={() => setPreset('performance')} />
                 </ToggleGroup>
               </FlexItem>
@@ -181,7 +219,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={xAxis === 'vram'} onChange={() => setXAxis('vram')} />
-                      <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} isDisabled />
+                      {costMetricsReady && <ToggleGroupItem text="HW Cost" isSelected={xAxis === 'price'} onChange={() => setXAxis('price')} />}
                       <ToggleGroupItem text="Throughput Index" isSelected={xAxis === 'throughput-index'} onChange={() => setXAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={xAxis === 'mem-bw'} onChange={() => setXAxis('mem-bw')} />
                     </ToggleGroup>
@@ -193,7 +231,7 @@ export default function GpuExplorerPage() {
                     </Text>
                     <ToggleGroup>
                       <ToggleGroupItem text="VRAM" isSelected={yAxis === 'vram'} onChange={() => setYAxis('vram')} />
-                      <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} isDisabled />
+                      {costMetricsReady && <ToggleGroupItem text="HW Cost" isSelected={yAxis === 'price'} onChange={() => setYAxis('price')} />}
                       <ToggleGroupItem text="Throughput Index" isSelected={yAxis === 'throughput-index'} onChange={() => setYAxis('throughput-index')} />
                       <ToggleGroupItem text="Mem BW" isSelected={yAxis === 'mem-bw'} onChange={() => setYAxis('mem-bw')} />
                     </ToggleGroup>
@@ -233,7 +271,9 @@ export default function GpuExplorerPage() {
                       💡 <strong>Top-right = high VRAM and throughput.</strong> These GPUs handle larger models and longer contexts.
                     </Text>
                     <Text component="p" style={{ display: 'block', marginBottom: '8px', color: '#3c3f42', fontSize: '13px', lineHeight: '1.6' }}>
-                      <strong>Bubble size</strong> represents BF16 TFLOPs. Cost efficiency axes and tokens-per-dollar will be restored once the Costings API is available.
+                      <strong>Bubble size</strong> represents {costingsEnabled && hasHardwareCosts
+                        ? 'throughput index per $1k of hardware cost (a relative cost-efficiency metric)'
+                        : 'BF16 TFLOPs'}.
                     </Text>
                     <Text component="p" style={{ display: 'block', marginBottom: '8px', color: '#3c3f42', fontSize: '13px', lineHeight: '1.6' }}>
                       <strong>Throughput Index</strong> is a planning metric derived from memory bandwidth, VRAM, and architecture generation.
@@ -243,7 +283,9 @@ export default function GpuExplorerPage() {
                       <strong>Inference performance</strong> depends on model architecture (GQA vs MHA), sequence length, batching, and inference backend (vLLM, TensorRT-LLM, etc.).
                     </Text>
                     <Text component="p" style={{ display: 'block', color: '#6a6e73', fontSize: '13px', lineHeight: '1.6' }}>
-                      <strong>Hardware cost and cloud pricing</strong> axes are pending the Costings REST API.
+                      {costingsEnabled
+                        ? <><strong>Hardware cost</strong> axes and cost efficiency use live data from the costings API. Enable a cloud provider on the Sources page for cloud rates.</>
+                        : <><strong>Hardware cost and cost efficiency</strong> axes appear when costings is enabled in Settings.</>}
                     </Text>
                   </CardBody>
                 </Card>

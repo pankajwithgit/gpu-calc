@@ -1,0 +1,92 @@
+{
+  "formatVersion": "v1.0",
+  "disclaimer": "This pricing list is for informational purposes only.",
+  "offerCode": "AmazonEC2",
+  "products": {
+    "SKUP4DSHARED": {
+      "sku": "SKUP4DSHARED",
+      "productFamily": "Compute Instance",
+      "attributes": {
+        "instanceType": "p4d.24xlarge",
+        "tenancy": "Shared",
+        "operatingSystem": "Linux",
+        "capacitystatus": "Used",
+        "preInstalledSw": "NA",
+        "licenseModel": "No License required"
+      }
+    },
+    "SKUP4DWINDOWS": {
+      "sku": "SKUP4DWINDOWS",
+      "productFamily": "Compute Instance",
+      "attributes": {
+        "instanceType": "p4d.24xlarge",
+        "tenancy": "Shared",
+        "operatingSystem": "Windows",
+        "capacitystatus": "Used",
+        "preInstalledSw": "NA",
+        "licenseModel": "No License required"
+      }
+    },
+    "SKUP4DDEDICATED": {
+      "sku": "SKUP4DDEDICATED",
+      "productFamily": "Compute Instance",
+      "attributes": {
+        "instanceType": "p4d.24xlarge",
+        "tenancy": "Dedicated",
+        "operatingSystem": "Linux",
+        "capacitystatus": "Used",
+        "preInstalledSw": "NA",
+        "licenseModel": "No License required"
+      }
+    }
+  },
+  "terms": {
+    "OnDemand": {
+      "SKUP4DSHARED": {
+        "SKUP4DSHARED.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "SKUP4DSHARED",
+          "priceDimensions": {
+            "SKUP4DSHARED.JRTCKXETXF.6YS6EN2CT7": {
+              "rateCode": "SKUP4DSHARED.JRTCKXETXF.6YS6EN2CT7",
+              "unit": "Hrs",
+              "pricePerUnit": {
+                "USD": "32.7726000000"
+              }
+            }
+          }
+        }
+      },
+      "SKUP4DWINDOWS": {
+        "SKUP4DWINDOWS.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "SKUP4DWINDOWS",
+          "priceDimensions": {
+            "SKUP4DWINDOWS.JRTCKXETXF.6YS6EN2CT7": {
+              "rateCode": "SKUP4DWINDOWS.JRTCKXETXF.6YS6EN2CT7",
+              "unit": "Hrs",
+              "pricePerUnit": {
+                "USD": "40.0000000000"
+              }
+            }
+          }
+        }
+      },
+      "SKUP4DDEDICATED": {
+        "SKUP4DDEDICATED.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "SKUP4DDEDICATED",
+          "priceDimensions": {
+            "SKUP4DDEDICATED.JRTCKXETXF.6YS6EN2CT7": {
+              "rateCode": "SKUP4DDEDICATED.JRTCKXETXF.6YS6EN2CT7",
+              "unit": "Hrs",
+              "pricePerUnit": {
+                "USD": "39.4400000000"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

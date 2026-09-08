@@ -176,7 +176,7 @@ All cards now have consistent dimensions:
 
 ## Browser Testing
 
-Visit: **http://localhost:3003/quick-estimate**
+Visit: **http://localhost:3003/performance**
 
 ### What to Test:
 
@@ -206,7 +206,7 @@ Visit: **http://localhost:3003/quick-estimate**
 
 ## Files Modified
 
-1. `/app/quick-estimate/page.tsx`
+1. `/app/performance/page.tsx`
    - Updated ResultCard component with variant prop
    - Changed card calls to use variant="dark" or "light"
    - Improved typography throughout

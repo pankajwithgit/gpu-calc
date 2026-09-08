@@ -32,3 +32,12 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024) return `${formatNumber(bytes / 1024, 2)} KiB`;
   return `${bytes} B`;
 }
+
+/** Average hours per month (365 days × 24 hrs ÷ 12 months). Used for GPU cost calculations. */
+export const HOURS_PER_MONTH = 730;
+
+/** Months in 3-year hardware amortisation period. */
+export const AMORT_MONTHS_3YR = 36;
+
+/** Months in 5-year hardware lifecycle period (for 5-year TCO calculations). */
+export const AMORT_MONTHS_5YR = 60;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const HF_BASE = 'https://huggingface.co'
+const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 interface HFConfigResponse {
   config:       Record<string, unknown>
@@ -26,18 +27,19 @@ export async function GET(req: NextRequest): Promise<NextResponse<HFConfigRespon
   const { searchParams } = new URL(req.url)
   const modelId = searchParams.get('model')?.trim()
 
-  if (!modelId || !modelId.includes('/')) {
+  if (!modelId || !MODEL_ID_RE.test(modelId)) {
     return NextResponse.json(
-      { error: 'invalid_model_id', message: 'Model ID must be in the format "owner/model-name"' },
+      { error: 'invalid_model_id', message: 'Model ID must be in the format "owner/model-name" using only letters, numbers, ".", "_" or "-".' },
       { status: 400 }
     )
   }
 
+  const [owner, repo] = modelId.split('/')
   const token = req.headers.get('x-hf-token') ?? undefined
   const warnings: string[] = []
 
   // ── Step 1: fetch config.json ──────────────────────────────────────────────
-  const configUrl = `${HF_BASE}/${modelId}/raw/main/config.json`
+  const configUrl = `${HF_BASE}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/raw/main/config.json`
   let configRes: Response
 
   try {
@@ -91,7 +93,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<HFConfigRespon
   )
 
   // ── Step 2: weight bytes from safetensors.index.json ──────────────────────
-  const indexUrl = `${HF_BASE}/${modelId}/resolve/main/model.safetensors.index.json`
+  const indexUrl = `${HF_BASE}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/resolve/main/model.safetensors.index.json`
   let weightBytes: number | null = null
   let weightSource: HFConfigResponse['weightSource'] = 'estimated'
 
@@ -118,7 +120,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<HFConfigRespon
   // ── Step 3: weight bytes from HF API (fallback) ───────────────────────────
   if (weightBytes === null) {
     try {
-      const apiUrl = `${HF_BASE}/api/models/${modelId}`
+      const apiUrl = `${HF_BASE}/api/models/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
       const apiRes = await hfFetch(apiUrl, token)
       if (apiRes.ok) {
         const meta = await apiRes.json() as Record<string, unknown>

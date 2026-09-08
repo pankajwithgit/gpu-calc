@@ -1,0 +1,34 @@
+# Provider GPU name patterns → AIC canonical system IDs.
+# Used by cloud rate scrapers to normalise GPU names across providers.
+
+# NVIDIA H200
+"H200": h200_sxm
+"ND_H200_v5": h200_sxm
+
+# NVIDIA H100
+"H100 SXM": h100_sxm
+"H100_SXM": h100_sxm
+"Standard_NC80adis_H100_v5": h100_sxm
+"Standard_ND96isr_H100_v5": h100_sxm
+"p5.48xlarge": h100_sxm
+"a3-highgpu-8g": h100_sxm
+
+# NVIDIA H100 PCIe
+"H100 PCIe": h100_pcie
+"H100_PCIe": h100_pcie
+
+# NVIDIA A100 80GB SXM
+"A100 80GB": a100_sxm
+"A100_80GB": a100_sxm
+"Standard_ND96amsr_A100_v4": a100_sxm
+"Standard_ND96asr_v4": a100_sxm
+"p4d.24xlarge": a100_sxm
+"a2-highgpu-8g": a100_sxm
+
+# NVIDIA L40S
+"L40S": l40s
+"L40s": l40s
+
+# NVIDIA B200
+"B200": b200_sxm
+"B200 SXM": b200_sxm

@@ -14,8 +14,8 @@ being rebuilt as a proper Next.js application.
 
 | Tool | Description |
 |---|---|
-| Quick Estimate | Instant GPU memory and throughput estimate |
-| Advanced Calculator | Full inference sizing with batching and quantization |
+| Performance | Instant GPU memory and throughput estimate |
+| Recommend Sizing | Full inference sizing with batching and quantization |
 | GPU Explorer | Side-by-side GPU comparison table and charts |
 | Hybrid Savings | Cloud vs on-premise cost modeling |
 | Routing Economics | Multi-tier model routing cost analysis |

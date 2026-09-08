@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Button, Label } from '@patternfly/react-core';
+import { Button, Label, Switch } from '@patternfly/react-core';
 import { EyeIcon, EyeSlashIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@patternfly/react-icons';
 import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext';
 import { getAppConfig } from '@/lib/app-config';
@@ -19,7 +19,11 @@ const BACKENDS: { value: InferenceBackend; label: string; description: string }[
 ];
 
 export function Settings() {
-  const { hydrated, defaultModel, setDefaultModel, hfToken, setHfToken, inferenceBackend, setInferenceBackend, backendVersion, setBackendVersion } = useSettings();
+  const {
+    hydrated, defaultModel, setDefaultModel, hfToken, setHfToken,
+    inferenceBackend, setInferenceBackend, backendVersion, setBackendVersion,
+    costingsEnabled, setCostingsEnabled,
+  } = useSettings();
   const { modelOptions, isLoading: catalogLoading } = useAicCatalog();
 
   const [localModel, setLocalModel] = React.useState('');
@@ -28,6 +32,8 @@ export function Settings() {
   const [modelSaved, setModelSaved] = React.useState(false);
   const [tokenSaved, setTokenSaved] = React.useState(false);
   const [backendSaved, setBackendSaved] = React.useState(false);
+  const [costingsSaved, setCostingsSaved] = React.useState(false);
+  const [costingsOpen, setCostingsOpen] = React.useState(false);
   const [validatedOpen, setValidatedOpen] = React.useState(false);
 
   // Sync local model input once context has loaded from localStorage
@@ -270,6 +276,49 @@ export function Settings() {
               <div className={styles.helperText}>{selectedBackend.description}</div>
             )}
           </div>
+        </div>
+        {/* ── Costings features ── */}
+        <div className={styles.section}>
+          <button
+            type="button"
+            className={styles.sectionHead}
+            style={{ cursor: 'pointer', width: '100%', background: 'none', border: 'none', font: 'inherit', textAlign: 'left' }}
+            onClick={() => setCostingsOpen(o => !o)}
+            aria-expanded={costingsOpen}
+            aria-controls="costings-settings-panel"
+          >
+            <div>
+              <div className={styles.sectionTitle}>
+                Costings features
+                <span style={{ fontSize: '11px', fontWeight: 400, marginLeft: '8px', color: '#6a6e73' }}>
+                  {costingsOpen ? '▲' : '▼'}
+                </span>
+              </div>
+              <div className={styles.sectionDesc}>
+                Experimental GPU cloud pricing, hardware costs, and on-prem cost modelling.
+              </div>
+            </div>
+            {costingsSaved && <Label color="green" icon={<CheckCircleIcon />}>Saved</Label>}
+          </button>
+          {costingsOpen && (
+            <div className={styles.fieldWrap} id="costings-settings-panel">
+              <Switch
+                id="settings-costings-enabled"
+                label="Enabled"
+                labelOff="Disabled"
+                isChecked={costingsEnabled}
+                onChange={(_e, checked) => {
+                  setCostingsEnabled(checked);
+                  setCostingsSaved(true);
+                  setTimeout(() => setCostingsSaved(false), 2000);
+                }}
+              />
+              {costingsEnabled && (
+                <>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

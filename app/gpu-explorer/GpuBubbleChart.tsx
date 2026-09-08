@@ -296,10 +296,14 @@ export function GpuBubbleChart({ data, width, height, xLabel, yLabel }: Props) {
                 <div style={{ color: '#3c3f42', fontSize: '12px' }}>
                   <div style={{ marginBottom: '3px' }}><strong>VRAM:</strong> {data[hoveredIndex].vram} GB</div>
                   <div style={{ marginBottom: '3px' }}><strong>Memory BW:</strong> {data[hoveredIndex].memBW?.toFixed(1)} GB/s</div>
-                  <div style={{ marginBottom: '3px' }}><strong>Hardware Cost:</strong> ${data[hoveredIndex].hwCost?.toLocaleString()}</div>
+                  {data[hoveredIndex].hwCost != null && (
+                    <div style={{ marginBottom: '3px' }}><strong>Hardware cost:</strong> ${data[hoveredIndex].hwCost?.toLocaleString()}</div>
+                  )}
                   <div style={{ marginBottom: '3px' }}><strong>Architecture:</strong> {data[hoveredIndex].architecture}</div>
-                  <div style={{ marginBottom: '3px' }}><strong>TFLOPS (BF16):</strong> {data[hoveredIndex].tflops}</div>
-                  <div><strong>Tokens/$:</strong> {data[hoveredIndex].tokensPerDollar?.toLocaleString()}</div>
+                  <div style={{ marginBottom: data[hoveredIndex].tokensPerDollar ? '3px' : 0 }}><strong>TFLOPS (BF16):</strong> {data[hoveredIndex].tflops}</div>
+                  {data[hoveredIndex].tokensPerDollar ? (
+                    <div><strong>Throughput / $1k:</strong> {Math.round(data[hoveredIndex].tokensPerDollar!).toLocaleString()}</div>
+                  ) : null}
                 </div>
               </div>
             </foreignObject>

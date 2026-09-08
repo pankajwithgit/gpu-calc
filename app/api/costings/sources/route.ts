@@ -1,0 +1,72 @@
+// GET /api/costings/sources
+// Same-origin proxy for the aicostings /sources endpoint. Returns the raw shape
+// { sources: [{ id, label, description }] } describing the available hosted-model
+// pricing feeds — the API owns both the feed list and their display labels, so
+// the frontend selector is fully API-driven.
+//
+// The browser must call this route rather than aicostings directly, so the
+// per-host gateway is resolved server-side. Keeps the .dev/.xyz two-host split
+// correct client-side (no build-time NEXT_PUBLIC_AICOSTINGS_API_URL).
+
+import { NextResponse } from 'next/server'
+
+const DEFAULT_TIMEOUT_SECONDS = 30
+
+export async function GET() {
+  // Dev default mirrors app/api/gpus/route.ts so local dev works without the
+  // gateway env set; production sets AICOSTINGS_GATEWAY_URL per host.
+  const baseUrl = process.env.AICOSTINGS_GATEWAY_URL || 'https://aicostings.dev'
+  const timeoutSeconds =
+    parseInt(process.env.AICOSTINGS_TIMEOUT_SECONDS || '', 10) || DEFAULT_TIMEOUT_SECONDS
+
+  try {
+    const res = await fetch(`${baseUrl}/sources`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutSeconds * 1000),
+    })
+
+    if (!res.ok) {
+      return NextResponse.json(
+        {
+          status: 'failed',
+          error: { code: 'COSTINGS_ERROR', message: `aicostings /sources returned ${res.status}` },
+        },
+        { status: 502, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } },
+      )
+    }
+
+    const data = await res.json()
+    return NextResponse.json(data, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        // Feed metadata changes rarely; cache generously.
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+      },
+    })
+  } catch (err: unknown) {
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      return NextResponse.json(
+        { status: 'failed', error: { code: 'COSTINGS_TIMEOUT', message: 'aicostings API timed out' } },
+        { status: 504, headers: { 'Access-Control-Allow-Origin': '*' } },
+      )
+    }
+    return NextResponse.json(
+      { status: 'failed', error: { code: 'COSTINGS_UNAVAILABLE', message: 'aicostings API is unreachable' } },
+      { status: 502, headers: { 'Access-Control-Allow-Origin': '*' } },
+    )
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
+}
