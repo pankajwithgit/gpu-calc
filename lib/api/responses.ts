@@ -20,8 +20,6 @@ export function formatGpuCatalogResponse(gpus: GpuSpec[]) {
         tflops: gpu.tflops,
         power_watts: gpu.powerWatts,
         cloud_availability_pct: gpu.cloudAvailabilityPct,
-        // Include live pricing if available
-        ...(gpu.livePricing && { live_pricing: gpu.livePricing })
       })),
       count: gpus.length
     }
