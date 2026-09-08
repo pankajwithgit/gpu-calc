@@ -31,8 +31,10 @@ export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInp
     return new Map(
       [...groups.entries()]
         .sort(([a], [b]) => {
-          if (a === 'other') return 1
-          if (b === 'other') return -1
+          const aOther = a.toLowerCase() === 'other' || a.toLowerCase().endsWith(' other')
+          const bOther = b.toLowerCase() === 'other' || b.toLowerCase().endsWith(' other')
+          if (aOther && !bOther) return 1
+          if (!aOther && bOther) return -1
           return a.localeCompare(b)
         })
         .map(([groupLabel, gpus]) =>
