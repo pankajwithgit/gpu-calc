@@ -328,7 +328,7 @@ export default function AdvancedEstimate() {
               items={modelItems}
               placeholder="e.g. meta-llama/Llama-3.1-70B-Instruct"
               allowCustom
-              supportedModels={aicModels}
+              supportedModels={getAppConfig().testedModels}
               hfToken={hfToken}
             />
           </div>

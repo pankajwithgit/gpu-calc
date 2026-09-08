@@ -1,7 +1,20 @@
 'use client'
 
 import * as React from 'react'
-import { Switch, Checkbox } from '@patternfly/react-core'
+import {
+  Switch,
+  Checkbox,
+  Select,
+  SelectList,
+  SelectGroup,
+  SelectOption,
+  MenuToggle,
+  TextInputGroup,
+  TextInputGroupMain,
+  TextInputGroupUtilities,
+  Button,
+} from '@patternfly/react-core'
+import TimesIcon from '@patternfly/react-icons/dist/esm/icons/times-icon'
 import { getAppConfig } from '@/lib/app-config'
 import styles from './ModelComboBox.module.css'
 
@@ -40,19 +53,6 @@ function groupItems(items: ComboBoxItem[]): GroupedItems[] {
   })).toSorted((a, b) => a.group.localeCompare(b.group))
 }
 
-function highlightMatch(text: string, query: string) {
-  if (!query) return <>{text}</>
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx < 0) return <>{text}</>
-  return (
-    <>
-      {text.slice(0, idx)}
-      <span className={styles.matchHighlight}>{text.slice(idx, idx + query.length)}</span>
-      {text.slice(idx + query.length)}
-    </>
-  )
-}
-
 const FP8_SUFFIX_RE = /-FP8(-\w+)*$/
 
 const NVFP4_SUFFIX_RE = /-NVFP4(-\w+)*$/
@@ -80,9 +80,8 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
   const [supportedOnly, setSupportedOnly] = React.useState(false)
   const prevModel = React.useRef(value)
   const [focusIndex, setFocusIndex] = React.useState(-1)
-  const wrapperRef = React.useRef<HTMLDivElement>(null)
-  const inputRef = React.useRef<HTMLInputElement>(null)
-  const menuRef = React.useRef<HTMLDivElement>(null)
+  const textInputRef = React.useRef<HTMLInputElement>(null)
+  const toggleRef = React.useRef<HTMLDivElement>(null)
 
   const variantMap = React.useMemo(() => {
     const map = new Map<string, { fp8?: string; nvfp4?: string }>()
@@ -130,7 +129,6 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
   }
 
   const selectedItem = activeItems.find(i => i.value === currentBase)
-  const displayValue = open ? filter : (activeVariant ? value : (selectedItem?.label ?? value))
 
   const filtered = React.useMemo(() => {
     if (!filter) return activeItems
@@ -153,35 +151,18 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
   const exactMatch = items.some(i => i.value.toLowerCase() === filter.toLowerCase() || i.label.toLowerCase() === filter.toLowerCase())
   const showCustom = allowCustom && open && filter.trim() && !exactMatch
 
-  React.useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setFilter('')
-        setFocusIndex(-1)
-      }
+  function selectItem(val: string) {
+    if (supportedOnly) {
+      prevModel.current = val
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  React.useEffect(() => {
-    if (open && focusIndex >= 0 && menuRef.current) {
-      const item = menuRef.current.querySelector(`[data-index="${focusIndex}"]`)
-      item?.scrollIntoView({ block: 'nearest' })
-    }
-  }, [open, focusIndex])
-
-  function select(val: string) {
     onChange(val)
     setOpen(false)
     setFilter('')
     setFocusIndex(-1)
-    inputRef.current?.blur()
   }
 
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFilter(e.target.value)
+  function handleInputChange(_event: React.FormEvent<HTMLInputElement>, val: string) {
+    setFilter(val)
     setFocusIndex(-1)
     if (!open) setOpen(true)
   }
@@ -191,39 +172,39 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
     setFilter('')
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  function handleInputKeyDown(event: React.KeyboardEvent) {
     const totalItems = flatItems.length + (showCustom ? 1 : 0)
 
-    switch (e.key) {
+    switch (event.key) {
       case 'ArrowDown':
-        e.preventDefault()
+        event.preventDefault()
         if (totalItems === 0) { if (!open) setOpen(true); break }
         setFocusIndex(prev => (prev + 1) % totalItems)
         if (!open) setOpen(true)
         break
       case 'ArrowUp':
-        e.preventDefault()
+        event.preventDefault()
         if (totalItems === 0) { if (!open) setOpen(true); break }
         setFocusIndex(prev => (prev <= 0 ? totalItems - 1 : prev - 1))
         if (!open) setOpen(true)
         break
       case 'Enter':
-        e.preventDefault()
+        event.preventDefault()
         if (focusIndex >= 0 && focusIndex < flatItems.length) {
-          select(flatItems[focusIndex].value)
+          selectItem(flatItems[focusIndex].value)
         } else if (focusIndex === flatItems.length && showCustom) {
-          select(filter.trim())
+          selectItem(filter.trim())
         } else if (allowCustom && filter.trim()) {
-          select(filter.trim())
+          selectItem(filter.trim())
         } else if (flatItems.length === 1) {
-          select(flatItems[0].value)
+          selectItem(flatItems[0].value)
         }
         break
       case 'Escape':
         setOpen(false)
         setFilter('')
         setFocusIndex(-1)
-        inputRef.current?.blur()
+        textInputRef.current?.blur()
         break
       case 'Tab':
         setOpen(false)
@@ -233,24 +214,18 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
     }
   }
 
-  function handleClear(e: React.MouseEvent) {
-    e.stopPropagation()
+  function handleClear() {
     onChange('')
     setFilter('')
     setFocusIndex(-1)
-    inputRef.current?.focus()
+    textInputRef.current?.focus()
   }
 
-  function handleChevronClick(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (open) {
-      setOpen(false)
-      setFilter('')
-      setFocusIndex(-1)
-    } else {
-      setOpen(true)
-      setFilter('')
-      inputRef.current?.focus()
+  function handleSelect(_event: React.MouseEvent | undefined, val: string | number | undefined) {
+    if (val === '__custom__') {
+      selectItem(filter.trim())
+    } else if (typeof val === 'string') {
+      selectItem(val)
     }
   }
 
@@ -264,8 +239,47 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
     }
   }
 
+  const displayValue = open ? filter : (activeVariant ? value : (selectedItem?.label ?? value))
+
+  const toggle = (tRef: React.RefObject<HTMLDivElement | HTMLButtonElement>) => (
+    <MenuToggle
+      ref={tRef as React.RefObject<HTMLButtonElement>}
+      variant="typeahead"
+      aria-label="Model selector"
+      onClick={() => { setOpen(prev => !prev); if (!open) setFilter('') }}
+      isExpanded={open}
+      isFullWidth
+      className={styles.menuToggle}
+    >
+      <TextInputGroup isPlain>
+        <TextInputGroupMain
+          value={displayValue}
+          onClick={() => { if (!open) { setOpen(true); setFilter('') } }}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onKeyDown={handleInputKeyDown}
+          id={id}
+          autoComplete="off"
+          innerRef={textInputRef}
+          placeholder={placeholder ?? 'Type or select...'}
+          role="combobox"
+          isExpanded={open}
+          aria-controls={id ? `${id}-listbox` : undefined}
+          aria-activedescendant={focusIndex >= 0 ? `${id}-opt-${focusIndex}` : undefined}
+        />
+        <TextInputGroupUtilities>
+          {value && !open && (
+            <Button variant="plain" onClick={handleClear} aria-label="Clear selection" className={styles.clearBtn}>
+              <TimesIcon />
+            </Button>
+          )}
+        </TextInputGroupUtilities>
+      </TextInputGroup>
+    </MenuToggle>
+  )
+
   return (
-    <div className={styles.wrapper} ref={wrapperRef}>
+    <div className={styles.wrapper}>
       <div className={styles.labelRow}>
         <label className={styles.label} htmlFor={id}>Model — Hugging Face ID</label>
         {supportedModels && (
@@ -278,112 +292,66 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
           />
         )}
       </div>
-      <div className={styles.toggleAnchor}>
-      <div className={`${styles.toggle} ${open ? styles.toggleOpen : ''}`}>
-        <input
-          ref={inputRef}
-          id={id}
-          type="text"
-          className={styles.input}
-          value={displayValue}
-          onChange={handleInputChange}
-          onFocus={handleInputFocus}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder ?? 'Type or select...'}
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={open}
-          aria-controls={id ? `${id}-listbox` : undefined}
-          aria-activedescendant={focusIndex >= 0 ? `opt-${focusIndex}` : undefined}
-        />
-        {value && !open && (
-          <button
-            type="button"
-            className={styles.clear}
-            onClick={handleClear}
-            aria-label="Clear selection"
-            tabIndex={-1}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
-        <div
-          className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}
-          onClick={handleChevronClick}
-          aria-hidden="true"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-      </div>
 
-      {open && (
-        <div
-          className={styles.menu}
-          ref={menuRef}
-          id={id ? `${id}-listbox` : undefined}
-          role="listbox"
-        >
+      <Select
+        id={id ? `${id}-select` : undefined}
+        isOpen={open}
+        selected={value}
+        onSelect={handleSelect}
+        onOpenChange={isOpen => { setOpen(isOpen); if (!isOpen) { setFilter(''); setFocusIndex(-1) } }}
+        toggle={toggle}
+        shouldFocusFirstItemOnOpen={false}
+        popperProps={{ width: 'trigger', maxWidth: 'trigger' }}
+      >
+        <SelectList id={id ? `${id}-listbox` : undefined} className={styles.selectList}>
           {groups.length === 0 && !showCustom && (
-            <div className={styles.empty}>No matches</div>
+            <SelectOption isDisabled value="__empty__">
+              No matches
+            </SelectOption>
           )}
 
-          {groups.map(group => (
-            <React.Fragment key={group.group}>
-              {group.group && (
-                <div className={styles.groupLabel}>{group.group}</div>
-              )}
-              {group.items.map(item => {
-                const idx = flatItems.indexOf(item)
-                const isSelected = item.value === value
-                const isFocused = idx === focusIndex
-                return (
-                  <div
-                    key={item.value}
-                    id={`opt-${idx}`}
-                    data-index={idx}
-                    role="option"
-                    aria-selected={isSelected}
-                    className={
-                      `${styles.option}` +
-                      `${isFocused ? ` ${styles.optionFocused}` : ''}` +
-                      `${isSelected ? ` ${styles.optionSelected}` : ''}`
-                    }
-                    onMouseDown={e => { e.preventDefault(); select(item.value) }}
-                    onMouseEnter={() => setFocusIndex(idx)}
-                  >
-                    <span className={styles.optionName}>
-                      {highlightMatch(item.label, filter)}
-                    </span>
-                  </div>
-                )
-              })}
-            </React.Fragment>
-          ))}
+          {groups.map(group => {
+            const options = group.items.map(item => {
+              const idx = flatItems.indexOf(item)
+              return (
+                <SelectOption
+                  key={item.value}
+                  id={`${id}-opt-${idx}`}
+                  value={item.value}
+                  isFocused={idx === focusIndex}
+                  isSelected={item.value === value}
+                  onMouseEnter={() => setFocusIndex(idx)}
+                >
+                  {item.label}
+                </SelectOption>
+              )
+            })
+
+            return group.group ? (
+              <SelectGroup key={group.group} label={group.group}>
+                {options}
+              </SelectGroup>
+            ) : (
+              <React.Fragment key="__ungrouped__">
+                {options}
+              </React.Fragment>
+            )
+          })}
 
           {showCustom && (
-            <div
-              id={`opt-${flatItems.length}`}
-              data-index={flatItems.length}
-              role="option"
-              aria-selected={false}
-              className={
-                `${styles.option} ${styles.customOption}` +
-                `${focusIndex === flatItems.length ? ` ${styles.optionFocused}` : ''}`
-              }
-              onMouseDown={e => { e.preventDefault(); select(filter.trim()) }}
+            <SelectOption
+              id={`${id}-opt-${flatItems.length}`}
+              value="__custom__"
+              isFocused={focusIndex === flatItems.length}
               onMouseEnter={() => setFocusIndex(flatItems.length)}
+              className={styles.customOption}
             >
               <span className={styles.customOptionLabel}>Use:</span>
               {filter.trim()}
-            </div>
+            </SelectOption>
           )}
-        </div>
-      )}
-      </div>
+        </SelectList>
+      </Select>
 
       {variants && (variants.fp8 || variants.nvfp4) && (
         <div className={styles.quantRow}>

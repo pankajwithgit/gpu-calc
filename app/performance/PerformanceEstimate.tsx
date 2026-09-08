@@ -1015,7 +1015,7 @@ export default function QuickEstimate() {
               items={modelItems}
               placeholder="Type model name or select from dropdown..."
               allowCustom
-              supportedModels={aicModels}
+              supportedModels={getAppConfig().testedModels}
               hfToken={hfToken}
             />
           </div>

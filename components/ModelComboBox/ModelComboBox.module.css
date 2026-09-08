@@ -2,10 +2,6 @@
   width: 100%;
 }
 
-.toggleAnchor {
-  position: relative;
-}
-
 .labelRow {
   display: flex;
   align-items: center;
@@ -24,6 +20,7 @@
   margin: 0;
 }
 
+/* ─── PatternFly Switch sizing ─── */
 .wrapper :global(.pf-v5-c-switch) {
   --pf-v5-c-switch--Height: 18px !important;
   --pf-v5-c-switch__toggle--Width: 32px !important;
@@ -47,139 +44,25 @@
   height: 12px !important;
 }
 
-.wrapper :global(.pf-v5-c-switch__input:focus-visible ~ .pf-v5-c-switch__toggle) {
-  outline: none !important;
-  box-shadow: none !important;
+/* ─── PatternFly MenuToggle overrides ─── */
+.menuToggle {
+  min-height: 42px;
 }
 
-.toggle {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 42px;
-  border: 1px solid #b8bbbe;
-  border-radius: 4px;
-  padding: 0;
-  background: #ffffff;
-  cursor: text;
-  box-sizing: border-box;
-  transition: border-color 0.15s;
-}
-.toggle:focus-within {
-  border-color: var(--blue, #0066cc);
-}
-.toggleOpen {
-  border-radius: 4px 4px 0 0;
-  border-color: var(--blue, #0066cc);
+.clearBtn {
+  padding: 4px !important;
 }
 
-.input {
-  flex: 1;
-  height: 100%;
-  border: none;
-  outline: none;
-  padding: 0 0 0 12px;
-  font-size: 14px;
-  font-family: var(--sans);
-  color: var(--t, #151515);
-  background: transparent;
-  min-width: 0;
-}
-.input::placeholder {
-  color: #6a6e73;
-}
-
-.chevron {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 100%;
-  cursor: pointer;
-  color: #6a6e73;
-  flex-shrink: 0;
-  transition: transform 0.2s;
-}
-.chevronOpen {
-  transform: rotate(180deg);
-}
-
-.clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 100%;
-  cursor: pointer;
-  color: #6a6e73;
-  border: none;
-  background: none;
-  padding: 0;
-  flex-shrink: 0;
-}
-.clear:hover {
-  color: #151515;
-}
-
-/* ─── Dropdown panel ─── */
-.menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
+/* ─── PatternFly Select menu overrides ─── */
+.selectList {
   max-height: 320px;
   overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid var(--blue, #0066cc);
-  border-top: none;
-  border-radius: 0 0 4px 4px;
-  z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  padding: 4px 0;
 }
 
-.groupLabel {
-  padding: 8px 12px 4px;
-  font-size: 11.5px;
-  font-family: var(--mono, monospace);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #3c3f42;
-  user-select: none;
-}
-
-.option {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-family: var(--sans);
-  color: #151515;
-  cursor: pointer;
-  user-select: none;
-}
-.option:hover,
-.optionFocused {
-  background: rgba(0, 102, 204, 0.08);
-}
-.optionSelected {
-  background: rgba(0, 102, 204, 0.12);
-  font-weight: 500;
-}
-
-.optionVendor {
-  color: #6a6e73;
-  margin-right: 2px;
-}
-.optionName {
-  color: #151515;
-}
-
+/* ─── Custom option ("Use: ...") ─── */
 .customOption {
   border-top: 1px solid #d2d2d2;
   margin-top: 4px;
-  padding-top: 8px;
   font-style: italic;
   color: #3c3f42;
 }
@@ -192,18 +75,7 @@
   font-style: normal;
 }
 
-.empty {
-  padding: 12px;
-  font-size: 13px;
-  color: #6a6e73;
-  text-align: center;
-}
-
-.matchHighlight {
-  background: rgba(240, 171, 0, 0.25);
-  border-radius: 1px;
-}
-
+/* ─── Quantization checkboxes ─── */
 .quantRow {
   margin-top: 6px;
 }
@@ -215,6 +87,7 @@
   color: var(--t2, #3c3f42);
 }
 
+/* ─── Helper text ─── */
 .helperText {
   font-size: 12px;
   color: var(--gc-text-3, #6a6e73);

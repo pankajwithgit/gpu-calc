@@ -208,7 +208,7 @@ export default function KvCacheCalc() {
               items={modelItems}
               placeholder="Type model name or select from dropdown..."
               allowCustom
-              supportedModels={aicModels}
+              supportedModels={getAppConfig().testedModels}
             />
           </div>
 
