@@ -15,6 +15,7 @@ interface GpuSizerParams {
   target_request_rate?: number;
   request_latency?: number;
   prefix?: number;
+  model_config?: Record<string, unknown> | null;
 }
 
 interface GpuSizerState {
@@ -97,6 +98,7 @@ export function GpuSizerProvider({ children }: { children: React.ReactNode }) {
     }
     if (p.request_latency != null) requestBody.request_latency = p.request_latency;
     if (p.prefix != null && p.prefix > 0) requestBody.prefix = p.prefix;
+    if (p.model_config != null) requestBody.model_config = p.model_config;
 
     setParams(p);
     setIsLoading(true);

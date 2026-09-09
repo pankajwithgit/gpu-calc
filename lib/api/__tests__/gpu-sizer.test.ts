@@ -70,6 +70,14 @@ describe('GpuSizerRequestSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('accepts a model_config object', () => {
+    const result = GpuSizerRequestSchema.safeParse({
+      ...VALID_REQUEST,
+      model_config: { hidden_size: 8192, architectures: ['LlamaForCausalLM'] },
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('accepts target_request_rate instead of target_concurrency', () => {
     const { target_concurrency, ...rest } = VALID_REQUEST
     const result = GpuSizerRequestSchema.safeParse({ ...rest, target_request_rate: 10 })
@@ -177,6 +185,27 @@ describe('callGpuSizer', () => {
     expect(sentBody.database_mode).toBe('HYBRID')
     expect(sentBody).not.toHaveProperty('username')
     expect(sentBody).not.toHaveProperty('password')
+  })
+
+  it('forwards model_config to the upstream request when present', async () => {
+    const mockFetch = mockFetchOk(EXTERNAL_RESPONSE)
+    vi.stubGlobal('fetch', mockFetch)
+
+    const model_config = { hidden_size: 8192, architectures: ['LlamaForCausalLM'] }
+    await callGpuSizer({ ...VALID_REQUEST, model_config })
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(sentBody.model_config).toEqual(model_config)
+  })
+
+  it('omits model_config from the upstream request when absent', async () => {
+    const mockFetch = mockFetchOk(EXTERNAL_RESPONSE)
+    vi.stubGlobal('fetch', mockFetch)
+
+    await callGpuSizer(VALID_REQUEST)
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(sentBody).not.toHaveProperty('model_config')
   })
 
   it('returns AIC_NOT_CONFIGURED when API URL is missing', async () => {

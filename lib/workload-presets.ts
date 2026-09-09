@@ -16,6 +16,6 @@ export const DEFAULT_WORKLOAD: WorkloadPreset = {
   osl: 128,
   ttft: 1000,
   tpot: 30,
-  concurrency: 32,
+  concurrency: 1,
   prefix: 0,
 }

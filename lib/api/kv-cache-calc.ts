@@ -85,6 +85,7 @@ export async function callKvCacheCalc(
   if (request.backend_version) externalPayload.backend_version = request.backend_version
   if (request.moe_tp_size != null) externalPayload.moe_tp_size = request.moe_tp_size
   if (request.moe_ep_size != null) externalPayload.moe_ep_size = request.moe_ep_size
+  if (request.model_config != null) externalPayload.model_config = request.model_config
 
   let response: Response
   try {

@@ -11,18 +11,13 @@
   },
   "suggestedModelNames": ["Gemma 4", "Nemotron Super", "DeepSeek V4", "gpt-oss"],
   "testedModels": [
-    "google/gemma-4-31B-it",
-    "RedHatAI/gemma-4-26B-A4B-it",
-    "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-FP8-block",
     "deepseek-ai/DeepSeek-V4-Pro",
+    "nvidia/Gemma-4-31B-IT-NVFP4",
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-FP8",
     "openai/gpt-oss-120b",
-    "RedHatAI/GLM-5.2-FP8",
+    "zai-org/GLM-5.2-FP8",
     "moonshotai/Kimi-K2.5"
-  ],
-  "huggingFaceModels": [
-    "RedHatAI/GLM-5.2-NVFP4-FP8"
   ],
   "modelRequestUrl": "https://github.com/redhat-performance/configiq/issues/new?labels=model-request&title=[Model+Request]+",
   "workloadPresets": [
