@@ -1186,11 +1186,7 @@ export default function QuickEstimate() {
       )}
 
       {/* ---------- result tiles ---------- */}
-      {!testResult && !isCalculating && !testError && (
-        <div className={styles.card} style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--t2)' }}>
-          Select a model and GPU system above, then press <strong>Calculate</strong> to see results.
-        </div>
-      )}
+      {!testResult && !isCalculating && !testError}
       {isCalculating && (
         <div className={styles.card}>
           <GpuChipLoader elapsed={elapsed} />

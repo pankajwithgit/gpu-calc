@@ -400,11 +400,7 @@ export default function KvCacheCalc() {
       )}
 
       {/* Placeholder */}
-      {!loading && !result && !error && (
-        <div className={styles.placeholder}>
-          Select a model and GPU system, then click Calculate
-        </div>
-      )}
+      {!loading && !result && !error}
 
       {/* Results */}
       {result && !loading && (
