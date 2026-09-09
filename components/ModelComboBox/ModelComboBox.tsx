@@ -22,6 +22,9 @@ export interface ComboBoxItem {
   value: string
   label: string
   group: string
+  isTested?: boolean
+  inCatalog?: boolean
+  requiresHfToken?: boolean
 }
 
 interface ComboBoxProps {
@@ -330,7 +333,14 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
                   isSelected={item.value === value}
                   onMouseEnter={() => setFocusIndex(idx)}
                 >
-                  {item.label}
+                  <div className={styles.optionRow}>
+                    <span>{item.label}</span>
+                    <div className={styles.badges}>
+                      {item.isTested && <span className={styles.testedBadge}>tested</span>}
+                      {item.inCatalog && !item.isTested && <span className={styles.catalogBadge}>in catalog</span>}
+                      {item.requiresHfToken && <span className={styles.hfTokenBadge}>requires HF token</span>}
+                    </div>
+                  </div>
                 </SelectOption>
               )
             })

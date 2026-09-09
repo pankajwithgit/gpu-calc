@@ -1,7 +1,13 @@
 'use client'
 
 import * as React from 'react'
-import { Switch } from '@patternfly/react-core'
+import {
+  Select,
+  SelectList,
+  SelectGroup,
+  SelectOption,
+  MenuToggle,
+} from '@patternfly/react-core'
 import { getAppConfig } from '@/lib/app-config'
 import type { GpuOption } from '@/lib/hooks/useAicCatalog'
 import styles from './GpuSystemInput.module.css'
@@ -14,6 +20,7 @@ interface GpuSystemInputProps {
 }
 
 export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInputProps) {
+  const [open, setOpen] = React.useState(false)
   const current = gpuOptions.find(g => g.systemId === value)
 
   const architectureGroups = React.useMemo(() => {
@@ -46,31 +53,71 @@ export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInp
     )
   }, [gpuOptions])
 
+  const selectedOption = gpuOptions.find(g => g.systemId === value)
+  const selectedLabel = selectedOption
+    ? `${selectedOption.label}${selectedOption.vramGb ? ` — ${selectedOption.vramGb} GB` : ''}${selectedOption.bandwidthTbps != null ? ` · ${selectedOption.bandwidthTbps} TB/s` : ''}${selectedOption.tflopsBf16 != null ? ` · ${selectedOption.tflopsBf16.toFixed(0)} TFLOPS` : ''}`
+    : 'Select GPU system…'
+
+  const toggle = (tRef: React.RefObject<HTMLButtonElement>) => (
+    <MenuToggle
+      ref={tRef}
+      onClick={() => setOpen(!open)}
+      isExpanded={open}
+      isFullWidth
+      className={styles.menuToggle}
+    >
+      {selectedLabel}
+    </MenuToggle>
+  )
+
+  const handleSelect = (event: any, val: any) => {
+    if (val) {
+      onChange(String(val))
+      setOpen(false)
+    }
+  }
+
   return (
     <div className={styles.wrapper}>
       <label htmlFor={id} className={styles.label}>GPU system</label>
-      <select
+      <Select
         id={id}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className={styles.select}
+        isOpen={open}
+        selected={value}
+        onSelect={handleSelect}
+        onOpenChange={setOpen}
+        toggle={toggle}
+        popperProps={{ width: 'trigger', maxWidth: 'trigger' }}
       >
-        {gpuOptions.length === 0
-          ? <option value={value} disabled>Loading GPU catalog…</option>
-          : [...architectureGroups.entries()].map(([groupLabel, gpus]) => (
-              <optgroup key={groupLabel} label={groupLabel}>
+        <SelectList className={styles.selectList}>
+          {gpuOptions.length === 0 ? (
+            <SelectOption isDisabled value="__empty__">
+              Loading GPU catalog…
+            </SelectOption>
+          ) : (
+            [...architectureGroups.entries()].map(([groupLabel, gpus]) => (
+              <SelectGroup key={groupLabel} label={groupLabel}>
                 {gpus.map(g => (
-                  <option key={g.systemId} value={g.systemId}>
-                    {g.label}
-                    {g.vramGb ? ` — ${g.vramGb} GB` : ''}
-                    {g.bandwidthTbps != null ? ` · ${g.bandwidthTbps} TB/s` : ''}
-                    {g.tflopsBf16 != null ? ` · ${g.tflopsBf16.toFixed(0)} TFLOPS` : ''}
-                  </option>
+                  <SelectOption
+                    key={g.systemId}
+                    value={g.systemId}
+                    isSelected={g.systemId === value}
+                  >
+                    <div className={styles.optionContent}>
+                      <span>{g.label}</span>
+                      <span className={styles.specs}>
+                        {g.vramGb ? `${g.vramGb} GB` : ''}
+                        {g.bandwidthTbps != null ? ` · ${g.bandwidthTbps} TB/s` : ''}
+                        {g.tflopsBf16 != null ? ` · ${g.tflopsBf16.toFixed(0)} TFLOPS` : ''}
+                      </span>
+                    </div>
+                  </SelectOption>
                 ))}
-              </optgroup>
+              </SelectGroup>
             ))
-        }
-      </select>
+          )}
+        </SelectList>
+      </Select>
       {current && (
         <div className={styles.helperText}>
           {current.vramGb != null && <>{current.vramGb} GB</>}

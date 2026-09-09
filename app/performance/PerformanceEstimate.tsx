@@ -85,7 +85,14 @@ export default function QuickEstimate() {
   const modelItems: ComboBoxItem[] = React.useMemo(() =>
     aicModels.map(m => {
       const slash = m.indexOf('/');
-      return { value: m, label: m, group: slash > 0 ? m.slice(0, slash) : '' };
+      const isTested = getAppConfig().testedModels.includes(m);
+      return {
+        value: m,
+        label: m,
+        group: slash > 0 ? m.slice(0, slash) : '',
+        isTested,
+        inCatalog: true,
+      };
     }), [aicModels]);
 
   // Set model from settings after context has loaded from localStorage
