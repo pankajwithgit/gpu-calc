@@ -55,7 +55,7 @@ export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInp
 
   const selectedOption = gpuOptions.find(g => g.systemId === value)
   const selectedLabel = selectedOption
-    ? `${selectedOption.label}${selectedOption.vramGb ? ` — ${selectedOption.vramGb} GB` : ''}${selectedOption.bandwidthTbps != null ? ` · ${selectedOption.bandwidthTbps} TB/s` : ''}${selectedOption.tflopsBf16 != null ? ` · ${selectedOption.tflopsBf16.toFixed(0)} TFLOPS` : ''}`
+    ? `${selectedOption.label}${selectedOption.vramGb ? ` — ${selectedOption.vramGb} GB` : ''}`
     : 'Select GPU system…'
 
   const toggle = (tRef: React.RefObject<HTMLButtonElement>) => (
@@ -107,8 +107,6 @@ export function GpuSystemInput({ id, value, onChange, gpuOptions }: GpuSystemInp
                       <span>{g.label}</span>
                       <span className={styles.specs}>
                         {g.vramGb ? `${g.vramGb} GB` : ''}
-                        {g.bandwidthTbps != null ? ` · ${g.bandwidthTbps} TB/s` : ''}
-                        {g.tflopsBf16 != null ? ` · ${g.tflopsBf16.toFixed(0)} TFLOPS` : ''}
                       </span>
                     </div>
                   </SelectOption>
