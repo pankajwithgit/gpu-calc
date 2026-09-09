@@ -31,7 +31,7 @@ function modelSuggestions(): string {
 }
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
 import { Term } from '@/app/performance/quickEstimateHelpers';
-import { HOURS_PER_MONTH, AMORT_MONTHS_3YR } from '@/lib/utils/format';
+import { HOURS_PER_MONTH, AMORT_MONTHS_5YR } from '@/lib/utils/format';
 
 
 // ─── FlipTile (reused from Quick Estimate pattern) ───────────────────────────
@@ -303,12 +303,12 @@ export default function AdvancedEstimate() {
   const memVal = useCountUp(result?.memory.value ?? 0, 750, 1);
 
   const hwCost = costings.gpuHardwareCosts.get(gpuSystem)?.new_usd ?? null;
-  const amortizedHwPerHour = hwCost != null ? hwCost / (AMORT_MONTHS_3YR * HOURS_PER_MONTH) : null;
+  const amortizedHwPerHour = hwCost != null ? hwCost / (AMORT_MONTHS_5YR * HOURS_PER_MONTH) : null;
   const resolvedCloudRate = resolveCloudRate(costings.gpuCloudRates.get(gpuSystem), preferredCloudProvider);
   const pricePerHour = resolvedCloudRate?.rate ?? amortizedHwPerHour ?? null;
   const rateBasis = resolvedCloudRate
     ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
-    : amortizedHwPerHour != null ? 'amortized hardware'
+    : amortizedHwPerHour != null ? 'amortized hardware (5-year)'
     : '';
   const numGpus = result?.recommendation.totalGpus ?? 0;
   const monthlyCost = pricePerHour != null ? numGpus * pricePerHour * HOURS_PER_MONTH : null;
