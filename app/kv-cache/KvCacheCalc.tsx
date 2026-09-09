@@ -10,6 +10,8 @@ import { useSettings, type InferenceBackend } from '@/contexts/SettingsContext'
 import { getAppConfig } from '@/lib/app-config'
 import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput';
 import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
+import { buildModelItems, needsHfConfig } from '@/lib/model-options';
+import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput'
 import type { KvCacheCalcResult } from '@/lib/api/kv-cache-calc'
 import styles from './KvCacheCalc.module.css'
@@ -24,7 +26,7 @@ const BREAKDOWN_COLORS: Record<string, string> = {
 }
 
 export default function KvCacheCalc() {
-  const { hydrated, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion: settingsBackendVersion } = useSettings()
+  const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion: settingsBackendVersion } = useSettings()
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog()
   const MODEL_OPTIONS = aicModels
 
@@ -90,18 +92,23 @@ export default function KvCacheCalc() {
     if (!isNaN(n) && n >= 1) setMaxBatchSize(n);
   };
 
-  const modelItems: ComboBoxItem[] = React.useMemo(() =>
-    aicModels.map(m => {
-      const slash = m.indexOf('/');
-      const isTested = getAppConfig().testedModels.includes(m);
-      return {
-        value: m,
-        label: m,
-        group: slash > 0 ? m.slice(0, slash) : '',
-        isTested,
-        inCatalog: true,
-      };
-    }), [aicModels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrated gates config.json readiness
+  const modelItems: ComboBoxItem[] = React.useMemo(() => buildModelItems(aicModels), [aicModels, hydrated]);
+
+  // HF config for models AIC can't resolve from its catalog (incl. tested models
+  // outside the catalog). Fetched on model change, sent to /api/memory on calc.
+  const [hfConfig, setHfConfig] = React.useState<Record<string, unknown> | null>(null);
+
+  React.useEffect(() => {
+    setHfConfig(null);
+    if (catalogLoading || !needsHfConfig(model, aicModels) || !model.includes('/')) return;
+    const timer = setTimeout(() => {
+      fetchModelConfig(model, hfToken).then(r => {
+        if (r.success && r.config) setHfConfig(r.config as Record<string, unknown>);
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [model, hfToken, aicModels, catalogLoading]);
 
   const handleTpSizeChange = (raw: string) => {
     const digits = raw.replace(/[^0-9]/g, '');
@@ -148,6 +155,7 @@ export default function KvCacheCalc() {
       memory_fraction_value: memFractionValue,
     }
     if (backendVersion.trim()) requestBody.backend_version = backendVersion.trim()
+    if (needsHfConfig(model, aicModels) && hfConfig) requestBody.model_config = hfConfig
     const moeTp = parseInt(moeTpSize, 10)
     if (!isNaN(moeTp) && moeTp > 0) requestBody.moe_tp_size = moeTp
     const moeEp = parseInt(moeEpSize, 10)

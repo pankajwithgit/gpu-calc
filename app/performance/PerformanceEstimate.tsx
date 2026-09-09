@@ -30,6 +30,7 @@ import { fetchEstimateAsInferenceResult, EstimateError } from '@/lib/api/estimat
 import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 import { ModelInput, type ModelStatus } from '@/components/ui/ModelInput';
 import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
+import { buildModelItems, needsHfConfig } from '@/lib/model-options';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { GpuChipLoader } from '@/components/GpuChipLoader/GpuChipLoader';
@@ -82,18 +83,8 @@ export default function QuickEstimate() {
   const [model, setModel] = React.useState('');
   const [gpu, setGpu] = React.useState(() => getAppConfig().defaultSystem);
 
-  const modelItems: ComboBoxItem[] = React.useMemo(() =>
-    aicModels.map(m => {
-      const slash = m.indexOf('/');
-      const isTested = getAppConfig().testedModels.includes(m);
-      return {
-        value: m,
-        label: m,
-        group: slash > 0 ? m.slice(0, slash) : '',
-        isTested,
-        inCatalog: true,
-      };
-    }), [aicModels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrated gates config.json readiness
+  const modelItems: ComboBoxItem[] = React.useMemo(() => buildModelItems(aicModels), [aicModels, hydrated]);
 
   // Set model from settings after context has loaded from localStorage
   const modelFromSettings = React.useRef(false);
@@ -250,9 +241,12 @@ export default function QuickEstimate() {
   React.useEffect(() => {
     setIsUsingFallback(false);
     setFallbackReason('');
+    // Clear any prior model's config so it can't leak into the next estimate.
+    setHfConfig(null);
 
-    // Skip HF fetch for supported and catalog models — we know they work
-    if (getAppConfig().testedModels.includes(model) || aicModels.includes(model)) {
+    // Skip HF fetch only for catalog models — AIC resolves those itself.
+    // Tested models outside the catalog still need their HF config sent along.
+    if (!needsHfConfig(model, aicModels)) {
       setIsFetchingConfig(false);
       return;
     }
@@ -319,7 +313,9 @@ export default function QuickEstimate() {
           vram_gb: currentAicGpu?.vramGb ?? null,
           gpu_memory_utilization: currentAicGpu?.gpuMemoryUtilization,
           backend_version: backendVersion || undefined,
-          hf_model_config: hfConfig as Record<string, unknown> | null,
+          // Only send the config for models AIC can't resolve itself; guards
+          // against a stale config from a previously selected model.
+          hf_model_config: needsHfConfig(model, aicModels) ? (hfConfig as Record<string, unknown> | null) : null,
           kvcache_quant_mode: testKVCachePrecision === 'FP8' ? 'fp8' :
                              testKVCachePrecision === 'NVFP4' ? 'nvfp4' : null,
           gemm_quant_mode: testWeightPrecision === 'FP8' ? 'fp8' :

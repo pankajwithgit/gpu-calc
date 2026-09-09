@@ -69,6 +69,14 @@ describe('KvCacheCalcRequestSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('accepts a model_config object', () => {
+    const result = KvCacheCalcRequestSchema.safeParse({
+      ...VALID_REQUEST,
+      model_config: { hidden_size: 8192, architectures: ['LlamaForCausalLM'] },
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('applies defaults for optional fields', () => {
     const result = KvCacheCalcRequestSchema.safeParse({
       model_path: 'test/model',
@@ -165,6 +173,18 @@ describe('callKvCacheCalc', () => {
     expect(sentBody).not.toHaveProperty('moe_tp_size')
     expect(sentBody).not.toHaveProperty('moe_ep_size')
     expect(sentBody).not.toHaveProperty('backend_version')
+    expect(sentBody).not.toHaveProperty('model_config')
+  })
+
+  it('forwards model_config to the upstream request when present', async () => {
+    const mockFetch = mockFetchOk(EXTERNAL_RESPONSE)
+    vi.stubGlobal('fetch', mockFetch)
+
+    const model_config = { hidden_size: 8192, architectures: ['LlamaForCausalLM'] }
+    await callKvCacheCalc({ ...VALID_REQUEST, model_config })
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(sentBody.model_config).toEqual(model_config)
   })
 
   it('returns AIC_NOT_CONFIGURED when API URL is missing', async () => {

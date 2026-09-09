@@ -3,7 +3,6 @@
 import * as React from 'react'
 import {
   Switch,
-  Checkbox,
   Select,
   SelectList,
   SelectGroup,
@@ -24,7 +23,7 @@ export interface ComboBoxItem {
   group: string
   isTested?: boolean
   inCatalog?: boolean
-  requiresHfToken?: boolean
+  isHuggingFace?: boolean
 }
 
 interface ComboBoxProps {
@@ -56,22 +55,6 @@ function groupItems(items: ComboBoxItem[]): GroupedItems[] {
   })).toSorted((a, b) => a.group.localeCompare(b.group))
 }
 
-const FP8_SUFFIX_RE = /-FP8(-\w+)*$/
-
-const NVFP4_SUFFIX_RE = /-NVFP4(-\w+)*$/
-
-function isFp8Model(modelId: string): boolean {
-  return FP8_SUFFIX_RE.test(modelId)
-}
-
-function isNvfp4Model(modelId: string): boolean {
-  return NVFP4_SUFFIX_RE.test(modelId)
-}
-
-function toBaseModelId(modelId: string): string {
-  return modelId.replace(FP8_SUFFIX_RE, '').replace(NVFP4_SUFFIX_RE, '')
-}
-
 function suggestedNames(): string {
   const names = getAppConfig().suggestedModelNames
   return names.length > 0 ? names.join(', ') : 'Nemotron, DeepSeek V4, Gemma 4, Kimi'
@@ -86,46 +69,19 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
   const textInputRef = React.useRef<HTMLInputElement>(null)
   const toggleRef = React.useRef<HTMLDivElement>(null)
 
-  const variantMap = React.useMemo(() => {
-    const map = new Map<string, { fp8?: string; nvfp4?: string }>()
-    for (const item of items) {
-      const base = toBaseModelId(item.value)
-      if (base === item.value) continue
-      if (!map.has(base)) map.set(base, {})
-      const entry = map.get(base)!
-      if (isFp8Model(item.value)) entry.fp8 = item.value
-      else if (isNvfp4Model(item.value)) entry.nvfp4 = item.value
-    }
-    return map
-  }, [items])
+  const validatedItems = React.useMemo(() =>
+    supportedModels ? items.filter(i => supportedModels.includes(i.value)) : items,
+    [items, supportedModels])
 
-  const currentBase = toBaseModelId(value)
-  const activeVariant: 'fp8' | 'nvfp4' | null = isFp8Model(value) ? 'fp8' : isNvfp4Model(value) ? 'nvfp4' : null
-  const variants = variantMap.get(currentBase)
-
-  const baseItems = React.useMemo(() =>
-    items.filter(i => !isFp8Model(i.value) && !isNvfp4Model(i.value)),
-    [items])
-
-  const validatedBaseItems = React.useMemo(() =>
-    supportedModels ? baseItems.filter(i => {
-      if (supportedModels.includes(i.value)) return true
-      const v = variantMap.get(i.value)
-      if (!v) return false
-      return (v.fp8 != null && supportedModels.includes(v.fp8)) ||
-             (v.nvfp4 != null && supportedModels.includes(v.nvfp4))
-    }) : baseItems,
-    [baseItems, supportedModels, variantMap])
-
-  const activeItems = supportedOnly ? validatedBaseItems : baseItems
+  const activeItems = supportedOnly ? validatedItems : items
   const wasAutoReplacedRef = React.useRef(false)
 
   const handleToggle = (_: React.FormEvent, checked: boolean) => {
     setSupportedOnly(checked)
     if (checked) {
       prevModel.current = value
-      if (!validatedBaseItems.some(i => i.value === currentBase) && validatedBaseItems.length > 0) {
-        onChange(validatedBaseItems[0].value)
+      if (!validatedItems.some(i => i.value === value) && validatedItems.length > 0) {
+        onChange(validatedItems[0].value)
         wasAutoReplacedRef.current = true
       } else {
         wasAutoReplacedRef.current = false
@@ -139,7 +95,7 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
     }
   }
 
-  const selectedItem = activeItems.find(i => i.value === currentBase)
+  const selectedItem = activeItems.find(i => i.value === value)
 
   const filtered = React.useMemo(() => {
     if (!filter) return activeItems
@@ -240,17 +196,7 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
     }
   }
 
-  function handleQuantToggle(variant: 'fp8' | 'nvfp4') {
-    return (_: React.FormEvent<HTMLInputElement>, checked: boolean) => {
-      if (checked && variants?.[variant]) {
-        onChange(variants[variant]!)
-      } else {
-        onChange(currentBase)
-      }
-    }
-  }
-
-  const displayValue = open ? filter : (activeVariant ? value : (selectedItem?.label ?? value))
+  const displayValue = open ? filter : (selectedItem?.label ?? value)
 
   const toggle = (tRef: React.RefObject<HTMLDivElement | HTMLButtonElement>) => (
     <MenuToggle
@@ -283,7 +229,7 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
             <div className={styles.selectedBadges}>
               {selectedItem.isTested && <span className={styles.testedBadge}>tested</span>}
               {selectedItem.inCatalog && !selectedItem.isTested && <span className={styles.catalogBadge}>in catalog</span>}
-              {selectedItem.requiresHfToken && <span className={styles.hfTokenBadge}>requires HF token</span>}
+              {selectedItem.isHuggingFace && !selectedItem.isTested && !selectedItem.inCatalog && <span className={styles.hfBadge}>hugging face</span>}
             </div>
           )}
           {value && !open && (
@@ -345,7 +291,7 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
                     <div className={styles.badges}>
                       {item.isTested && <span className={styles.testedBadge}>tested</span>}
                       {item.inCatalog && !item.isTested && <span className={styles.catalogBadge}>in catalog</span>}
-                      {item.requiresHfToken && <span className={styles.hfTokenBadge}>requires HF token</span>}
+                      {item.isHuggingFace && !item.isTested && !item.inCatalog && <span className={styles.hfBadge}>hugging face</span>}
                     </div>
                   </div>
                 </SelectOption>
@@ -377,27 +323,6 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
           )}
         </SelectList>
       </Select>
-
-      {variants && (variants.fp8 || variants.nvfp4) && (
-        <div className={styles.quantRow}>
-          {variants.fp8 && (
-            <Checkbox
-              id={id ? `${id}-fp8` : 'fp8-toggle'}
-              label="Use FP8 quantization"
-              isChecked={activeVariant === 'fp8'}
-              onChange={handleQuantToggle('fp8')}
-            />
-          )}
-          {variants.nvfp4 && (
-            <Checkbox
-              id={id ? `${id}-nvfp4` : 'nvfp4-toggle'}
-              label="Use NVFP4 quantization"
-              isChecked={activeVariant === 'nvfp4'}
-              onChange={handleQuantToggle('nvfp4')}
-            />
-          )}
-        </div>
-      )}
 
       {supportedModels && (
         <div className={styles.helperText}>

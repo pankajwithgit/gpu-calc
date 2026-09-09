@@ -75,18 +75,6 @@
   font-style: normal;
 }
 
-/* ─── Quantization checkboxes ─── */
-.quantRow {
-  margin-top: 6px;
-}
-
-.quantRow :global(.pf-v5-c-check__label) {
-  font-size: 12px;
-  font-family: var(--mono, monospace);
-  font-weight: 500;
-  color: var(--t2, #3c3f42);
-}
-
 /* ─── Helper text ─── */
 .helperText {
   font-size: 12px;
@@ -119,7 +107,7 @@
 
 .testedBadge,
 .catalogBadge,
-.hfTokenBadge {
+.hfBadge {
   font-size: 10px;
   font-weight: 600;
   font-family: var(--mono, monospace);
@@ -140,9 +128,9 @@
   color: #155724;
 }
 
-.hfTokenBadge {
-  background-color: #fff3cd;
-  color: #856404;
+.hfBadge {
+  background-color: #fdf0d5;
+  color: #8a6d00;
 }
 
 .selectedBadges {

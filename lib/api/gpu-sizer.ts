@@ -96,6 +96,7 @@ export async function callGpuSizer(
   if (request.target_concurrency != null) externalPayload.target_concurrency = request.target_concurrency
   if (request.request_latency != null) externalPayload.request_latency = request.request_latency
   if (request.prefix != null) externalPayload.prefix = request.prefix
+  if (request.model_config != null) externalPayload.model_config = request.model_config
 
   let response: Response
   try {

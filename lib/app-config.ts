@@ -8,6 +8,7 @@ export interface AppConfig {
   defaultBackend: string;
   backendVersions: Record<string, string>;
   testedModels: string[];
+  huggingFaceModels: string[];
   suggestedModelNames: string[];
   modelRequestUrl: string;
   workloadPresets: WorkloadPreset[];
@@ -26,6 +27,7 @@ const FALLBACK: AppConfig = {
     'sglang': '0.5.17',
   },
   testedModels: [],
+  huggingFaceModels: [],
   suggestedModelNames: [],
   modelRequestUrl: '',
   workloadPresets: [],
@@ -47,6 +49,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
       defaultBackend: data.defaultBackend ?? FALLBACK.defaultBackend,
       backendVersions: data.backendVersions ?? FALLBACK.backendVersions,
       testedModels: data.testedModels ?? FALLBACK.testedModels,
+      huggingFaceModels: data.huggingFaceModels ?? FALLBACK.huggingFaceModels,
       suggestedModelNames: data.suggestedModelNames ?? FALLBACK.suggestedModelNames,
       modelRequestUrl: data.modelRequestUrl ?? FALLBACK.modelRequestUrl,
       workloadPresets: data.workloadPresets ?? FALLBACK.workloadPresets,

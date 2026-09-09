@@ -23,6 +23,7 @@ import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import { ModelInput } from '@/components/ui/ModelInput';
 import { ComboBox, type ComboBoxItem } from '@/components/ModelComboBox/ModelComboBox';
+import { buildModelItems, needsHfConfig } from '@/lib/model-options';
 import { GpuSystemInput } from '@/components/ui/GpuSystemInput';
 
 function modelSuggestions(): string {
@@ -142,21 +143,12 @@ export default function AdvancedEstimate() {
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog();
   const MODEL_OPTIONS = aicModels;
 
-  const modelItems: ComboBoxItem[] = React.useMemo(() =>
-    aicModels.map(m => {
-      const slash = m.indexOf('/');
-      const isTested = getAppConfig().testedModels.includes(m);
-      return {
-        value: m,
-        label: m,
-        group: slash > 0 ? m.slice(0, slash) : '',
-        isTested,
-        inCatalog: true,
-      };
-    }), [aicModels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrated gates config.json readiness
+  const modelItems: ComboBoxItem[] = React.useMemo(() => buildModelItems(aicModels), [aicModels, hydrated]);
 
   // Input state
   const [model, setModel] = React.useState('');
+  const [hfConfig, setHfConfig] = React.useState<Record<string, unknown> | null>(null);
 
   // Set model from settings after context has loaded from localStorage
   const modelFromSettings = React.useRef(false);
@@ -248,17 +240,31 @@ export default function AdvancedEstimate() {
     setPrefix(isNaN(n) ? 0 : n);
   };
 
-  // Model status check + fetch HF config
+  // Model status check + fetch HF config. Catalog models resolve server-side;
+  // everything else (incl. tested models outside the catalog) needs its HF
+  // config.json fetched and stored so it can be sent to AIC on calculate.
   React.useEffect(() => {
     if (catalogLoading) { setModelStatus('idle'); return; }
+    setHfConfig(null);
     const timer = setTimeout(() => {
       if (!model.includes('/')) { setModelStatus('idle'); return; }
-      if (getAppConfig().testedModels.includes(model)) { setModelStatus('supported'); return; }
-      const inCatalog = MODEL_OPTIONS.includes(model);
-      if (inCatalog) { setModelStatus('catalog'); return; }
+      const isTested = getAppConfig().testedModels.includes(model);
+      if (!needsHfConfig(model, MODEL_OPTIONS)) {
+        setModelStatus(isTested ? 'supported' : 'catalog');
+        return;
+      }
       setModelStatus('fetching');
       fetchModelConfig(model, hfToken).then(r => {
-        setModelStatus(r.success && r.config ? 'fetched' : 'error');
+        if (r.success && r.config) {
+          setHfConfig(r.config as Record<string, unknown>);
+          // Tested models keep their blue "supported" status even though we
+          // fetched the config from HF; others show the neutral "fetched".
+          setModelStatus(isTested ? 'supported' : 'fetched');
+        } else {
+          // Tested models stay blue — AIC can still resolve them from HF
+          // server-side when we send no model_config.
+          setModelStatus(isTested ? 'supported' : 'error');
+        }
       });
     }, 500);
     return () => clearTimeout(timer);
@@ -292,6 +298,8 @@ export default function AdvancedEstimate() {
       tpot, target_concurrency: targetConcurrency, prefix,
       ...(requestLatency != null ? { request_latency: requestLatency } : {}),
       backend: inferenceBackend,
+      // Send the HF config for models AIC can't resolve from its catalog.
+      ...(needsHfConfig(model, MODEL_OPTIONS) && hfConfig ? { model_config: hfConfig } : {}),
     });
   };
 
