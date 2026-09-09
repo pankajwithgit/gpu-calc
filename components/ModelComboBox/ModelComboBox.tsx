@@ -115,6 +115,7 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
     [baseItems, supportedModels, variantMap])
 
   const activeItems = supportedOnly ? validatedBaseItems : baseItems
+  const wasAutoReplacedRef = React.useRef(false)
 
   const handleToggle = (_: React.FormEvent, checked: boolean) => {
     setSupportedOnly(checked)
@@ -122,9 +123,16 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
       prevModel.current = value
       if (!validatedBaseItems.some(i => i.value === currentBase) && validatedBaseItems.length > 0) {
         onChange(validatedBaseItems[0].value)
+        wasAutoReplacedRef.current = true
+      } else {
+        wasAutoReplacedRef.current = false
       }
     } else {
-      onChange(prevModel.current)
+      // Only restore prevModel if enabling the filter caused an auto-replacement
+      if (wasAutoReplacedRef.current) {
+        onChange(prevModel.current)
+      }
+      wasAutoReplacedRef.current = false
     }
   }
 
