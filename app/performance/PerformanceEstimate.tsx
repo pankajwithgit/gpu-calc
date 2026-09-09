@@ -495,12 +495,13 @@ export default function QuickEstimate() {
 
   const realMonthlyCost = testResult && gpuPricePerHour != null ?
     realGpuCount * gpuPricePerHour * HOURS_PER_MONTH :
-    0;
+    null;
+  const realMonthlyCostForDisplay = realMonthlyCost ?? 0;
 
   const gpus = useCountUp(realGpuCount);
   const weight = useCountUp(realWeightGB);
   const kv = useCountUp(realKVPerReqMB);
-  const cost = useCountUp(realMonthlyCost);
+  const cost = useCountUp(realMonthlyCostForDisplay);
 
   const handleTourComplete = () => {
     setShowTour(false);
@@ -525,7 +526,7 @@ export default function QuickEstimate() {
   };
 
   const handleSaveEstimate = (data: { name: string; tags: string; notes: string }) => {
-    if (!testResult || !catalogGpuForPricing) return;
+    if (!testResult || !catalogGpuForPricing || gpuPricePerHour == null) return;
 
     const kvPerUserGB = (testResult.memory_analysis.kv_cache_used_gb || 0) / testConcurrentUsers;
     const kvMBPerToken = (kvPerUserGB * 1000) / (testISL + testOSL);
@@ -554,8 +555,8 @@ export default function QuickEstimate() {
         kvCacheMBPerToken: kvMBPerToken,
         kvCategory: testResult.memory_analysis.kv_category || 'KV-1',
         kvCategoryLabel: testResult.memory_analysis.kv_category_label || 'Standard Dense',
-        cloudCostMonthly: realMonthlyCost,
-        cloudCost5Year: realMonthlyCost * 60,
+        cloudCostMonthly: realMonthlyCost ?? 0,
+        cloudCost5Year: (realMonthlyCost ?? 0) * 60,
         selfHostedCostMonthly: (catalogGpuForPricing.hardware_cost_usd * realGpuCount) / AMORT_MONTHS_5YR,
         selfHostedCost5Year: catalogGpuForPricing.hardware_cost_usd * realGpuCount,
       },
@@ -667,7 +668,7 @@ export default function QuickEstimate() {
       testResult.memory_analysis.weight_gb.toFixed(1),
       (testResult.memory_analysis.kv_cache_used_gb || 0).toFixed(1),
       testResult.memory_analysis.kv_category_label || 'Standard Dense',
-      `$${realMonthlyCost.toLocaleString()}`, `$${(realMonthlyCost * AMORT_MONTHS_5YR).toLocaleString()}`,
+      `$${(realMonthlyCost ?? 0).toLocaleString()}`, `$${((realMonthlyCost ?? 0) * AMORT_MONTHS_5YR).toLocaleString()}`,
       `$${((catalogGpuForPricing.hardware_cost_usd * realGpuCount) / AMORT_MONTHS_5YR).toFixed(0)}`,
       `$${(catalogGpuForPricing.hardware_cost_usd * realGpuCount).toLocaleString()}`
     ];
@@ -1333,7 +1334,7 @@ export default function QuickEstimate() {
           />
         </div>
 
-        {costingsEnabled && gpuPricePerHour == null && (
+        {costingsEnabled && gpuPricePerHour == null && !costings.isLoading && (
           <div style={{
             border: '1px solid #d2d2d2', borderRadius: '6px', padding: '14px',
             fontSize: '13px', fontFamily: 'var(--font-mono)', color: '#54585c',
@@ -1798,11 +1799,11 @@ export default function QuickEstimate() {
         <Button variant="secondary" onClick={handleCopyCLICommand} isDisabled={!testResult}>
           Copy CLI command
         </Button>
-        <Button variant="secondary" onClick={handleExportToSheets} isDisabled={!testResult || !catalogGpuForPricing}>
+        <Button variant="secondary" onClick={handleExportToSheets} isDisabled={!testResult || !catalogGpuForPricing || gpuPricePerHour == null}>
           Export to Sheets
         </Button>
         <span className={styles.footerSpacer} />
-        <Button variant="primary" onClick={() => setShowSaveModal(true)} isDisabled={!testResult || !catalogGpuForPricing}>
+        <Button variant="primary" onClick={() => setShowSaveModal(true)} isDisabled={!testResult || !catalogGpuForPricing || gpuPricePerHour == null}>
           Save estimate{savedCount > 0 && ` (${savedCount})`}
         </Button>
       </div>
