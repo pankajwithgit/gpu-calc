@@ -170,7 +170,7 @@ export default function AdvancedEstimate() {
   const [osl, setOsl] = React.useState(128);
   const [ttft, setTtft] = React.useState(1000);
   const [tpot, setTpot] = React.useState(30);
-  const [targetConcurrency, setTargetConcurrency] = React.useState(32);
+  const [targetConcurrency, setTargetConcurrency] = React.useState(1);
   const [requestLatency, setRequestLatency] = React.useState<number | null>(null);
   const [prefix, setPrefix] = React.useState(0);
 
@@ -188,7 +188,7 @@ export default function AdvancedEstimate() {
   const [oslInput, setOslInput] = React.useState('128');
   const [ttftInput, setTtftInput] = React.useState('1000');
   const [tpotInput, setTpotInput] = React.useState('30');
-  const [concurrencyInput, setConcurrencyInput] = React.useState('32');
+  const [concurrencyInput, setConcurrencyInput] = React.useState('1');
   const [latencyInput, setLatencyInput] = React.useState('');
   const [prefixInput, setPrefixInput] = React.useState('0');
 

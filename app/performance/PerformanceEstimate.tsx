@@ -165,7 +165,7 @@ export default function QuickEstimate() {
   const [toastMessage, setToastMessage] = React.useState('');
 
   // Interactive controls
-  const [testConcurrentUsers, setTestConcurrentUsers] = React.useState(32);
+  const [testConcurrentUsers, setTestConcurrentUsers] = React.useState(1);
   const [testISL, setTestISL] = React.useState(2048);
   const [testOSL, setTestOSL] = React.useState(128);
   const [testPrefix, setTestPrefix] = React.useState(0);
@@ -179,7 +179,7 @@ export default function QuickEstimate() {
   
   const [islInput, setIslInput] = React.useState('2048');
   const [oslInput, setOslInput] = React.useState('128');
-  const [concurrentUsersInput, setConcurrentUsersInput] = React.useState('32');
+  const [concurrentUsersInput, setConcurrentUsersInput] = React.useState('1');
   const [prefixInput, setPrefixInput] = React.useState('0');
   const [tpSizeInput, setTpSizeInput] = React.useState('1');
   const [ppSizeInput, setPpSizeInput] = React.useState('1');
