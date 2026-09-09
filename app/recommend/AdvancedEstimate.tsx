@@ -246,6 +246,7 @@ export default function AdvancedEstimate() {
   React.useEffect(() => {
     if (catalogLoading) { setModelStatus('idle'); return; }
     setHfConfig(null);
+    let cancelled = false;
     const timer = setTimeout(() => {
       if (!model.includes('/')) { setModelStatus('idle'); return; }
       const isTested = getAppConfig().testedModels.includes(model);
@@ -255,6 +256,8 @@ export default function AdvancedEstimate() {
       }
       setModelStatus('fetching');
       fetchModelConfig(model, hfToken).then(r => {
+        // Ignore a response for a model the user has since moved away from.
+        if (cancelled) return;
         if (r.success && r.config) {
           setHfConfig(r.config as Record<string, unknown>);
           // Tested models keep their blue "supported" status even though we
@@ -267,7 +270,7 @@ export default function AdvancedEstimate() {
         }
       });
     }, 500);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [model, hfToken, MODEL_OPTIONS, catalogLoading, hydrated]);
 
   // Fetch live pricing

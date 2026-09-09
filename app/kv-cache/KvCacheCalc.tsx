@@ -102,12 +102,14 @@ export default function KvCacheCalc() {
   React.useEffect(() => {
     setHfConfig(null);
     if (catalogLoading || !needsHfConfig(model, aicModels) || !model.includes('/')) return;
+    let cancelled = false;
     const timer = setTimeout(() => {
       fetchModelConfig(model, hfToken).then(r => {
-        if (r.success && r.config) setHfConfig(r.config as Record<string, unknown>);
+        // Ignore a response for a model the user has since moved away from.
+        if (!cancelled && r.success && r.config) setHfConfig(r.config as Record<string, unknown>);
       });
     }, 500);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [model, hfToken, aicModels, catalogLoading]);
 
   const handleTpSizeChange = (raw: string) => {

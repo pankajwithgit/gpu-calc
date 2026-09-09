@@ -251,12 +251,17 @@ export default function QuickEstimate() {
       return;
     }
 
+    let cancelled = false;
     const fetchConfig = async () => {
       setIsFetchingConfig(true);
       console.log('🔄 Fetching config from HuggingFace for:', model);
       console.log('🔑 HF Token:', hfToken ? `Provided (${hfToken.substring(0, 7)}...)` : 'Not provided');
 
       const result = await fetchModelConfig(model, hfToken);
+
+      // Ignore a response for a model the user has since moved away from — the
+      // superseding effect run owns the loading + config state.
+      if (cancelled) return;
 
       if (result.success && result.config) {
         setHfConfig(result.config);
@@ -276,7 +281,7 @@ export default function QuickEstimate() {
 
     // Debounce to avoid fetching while user is typing
     const timer = setTimeout(fetchConfig, 500);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [model, hfToken, hydrated, aicModels]);
 
   // Auto-run calculation when inputs change — calls AIC /recommend API
