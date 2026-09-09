@@ -279,6 +279,13 @@ export function ComboBox({ value, onChange, items, placeholder, id, allowCustom 
           aria-activedescendant={focusIndex >= 0 ? `${id}-opt-${focusIndex}` : undefined}
         />
         <TextInputGroupUtilities>
+          {value && !open && selectedItem && (
+            <div className={styles.selectedBadges}>
+              {selectedItem.isTested && <span className={styles.testedBadge}>tested</span>}
+              {selectedItem.inCatalog && !selectedItem.isTested && <span className={styles.catalogBadge}>in catalog</span>}
+              {selectedItem.requiresHfToken && <span className={styles.hfTokenBadge}>requires HF token</span>}
+            </div>
+          )}
           {value && !open && (
             <Button variant="plain" onClick={handleClear} aria-label="Clear selection" className={styles.clearBtn}>
               <TimesIcon />
