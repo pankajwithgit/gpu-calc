@@ -100,8 +100,9 @@ function friendlyErrorTitle(code: string | null): string {
 function friendlyErrorMessage(code: string | null, raw: string): string {
   switch (code) {
     case 'AIC_TIMEOUT':
-    case 'NETWORK_ERROR':
       return 'The AIConfigurator service took too long to respond. This can happen with complex configurations.';
+    case 'NETWORK_ERROR':
+      return 'Could not reach the AIConfigurator service or it takes too long to respond.';
     case 'AIC_NO_CONFIGURATION':
       return 'No valid GPU configuration found for this model and hardware combination.';
     case 'AIC_UNAVAILABLE':
