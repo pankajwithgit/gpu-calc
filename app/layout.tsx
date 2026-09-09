@@ -40,7 +40,7 @@ import "@patternfly/react-styles/css/components/Tooltip/tooltip.css";
 import "./globals.css";
 import "./theme.css";
 import { AppShell } from "@/components/layout/AppShell";
-import { GpuSizerProvider } from "@/contexts/GpuSizerContext";
+import { RecommendProvider } from "@/contexts/RecommendContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 
 const redHatDisplay = Red_Hat_Display({
@@ -89,11 +89,11 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <GpuSizerProvider>
+        <RecommendProvider>
           <SettingsProvider>
             <AppShell>{children}</AppShell>
           </SettingsProvider>
-        </GpuSizerProvider>
+        </RecommendProvider>
       </body>
     </html>
   );

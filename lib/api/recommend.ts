@@ -1,13 +1,13 @@
-import type { GpuSizerRequest } from './schemas'
+import type { RecommendRequest } from './schemas'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface GpuSizerWarning {
+interface RecommendWarning {
   code: string
   message: string
 }
 
-export interface GpuSizerResult {
+export interface RecommendResult {
   requestId: string
   status: 'completed'
   recommendation: {
@@ -42,10 +42,10 @@ export interface GpuSizerResult {
     targetTtftMs: number
     durationMs: number
   }
-  warnings: GpuSizerWarning[]
+  warnings: RecommendWarning[]
 }
 
-export interface GpuSizerErrorResponse {
+export interface RecommendErrorResponse {
   requestId: string
   status: 'failed'
   error: {
@@ -54,7 +54,7 @@ export interface GpuSizerErrorResponse {
   }
 }
 
-export type GpuSizerResponse = GpuSizerResult | GpuSizerErrorResponse
+export type RecommendResponse = RecommendResult | RecommendErrorResponse
 
 // ─── Request ID ──────────────────────────────────────────────────────────────
 
@@ -66,9 +66,9 @@ export function generateRequestId(): string {
 
 const DEFAULT_TIMEOUT_SECONDS = 90
 
-export async function callGpuSizer(
-  request: GpuSizerRequest
-): Promise<GpuSizerResponse> {
+export async function callRecommend(
+  request: RecommendRequest
+): Promise<RecommendResponse> {
   const requestId = generateRequestId()
   const startTime = performance.now()
 
@@ -148,7 +148,7 @@ export async function callGpuSizer(
   const dp = (best.dp as number) ?? 1
   const replicasNeeded = (best.replicas_needed as number) ?? 1
 
-  const warnings: GpuSizerWarning[] = []
+  const warnings: RecommendWarning[] = []
   const parallelismProduct = tp * pp * dp
   if (parallelismProduct !== numTotalGpus) {
     warnings.push({
@@ -200,6 +200,6 @@ export async function callGpuSizer(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeError(requestId: string, code: string, message: string): GpuSizerErrorResponse {
+function makeError(requestId: string, code: string, message: string): RecommendErrorResponse {
   return { requestId, status: 'failed', error: { code, message } }
 }

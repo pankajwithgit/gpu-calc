@@ -15,7 +15,7 @@ import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 
 import styles from './AdvancedEstimate.module.css';
 import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
-import { useGpuSizer } from '@/contexts/GpuSizerContext';
+import { useRecommend } from '@/contexts/RecommendContext';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
@@ -171,7 +171,7 @@ export default function AdvancedEstimate() {
   const [modelStatus, setModelStatus] = React.useState<'idle' | 'supported' | 'catalog' | 'fetching' | 'fetched' | 'error'>('idle');
 
   // GPU sizer (persistent across navigation)
-  const { isLoading, result, error, errorCode, elapsed, debugRequest, debugResponse, debugStatus, debugDuration, startSizing } = useGpuSizer();
+  const { isLoading, result, error, errorCode, elapsed, debugRequest, debugResponse, debugStatus, debugDuration, startSizing } = useRecommend();
   const [debugOpen, setDebugOpen] = React.useState(false);
 
   // Additional constraints accordion

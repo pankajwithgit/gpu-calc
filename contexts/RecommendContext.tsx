@@ -1,9 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import type { GpuSizerResult } from '@/lib/api/gpu-sizer';
+import type { RecommendResult } from '@/lib/api/recommend';
 
-interface GpuSizerParams {
+interface RecommendParams {
   model_path: string;
   system: string;
   isl: number;
@@ -18,10 +18,10 @@ interface GpuSizerParams {
   model_config?: Record<string, unknown> | null;
 }
 
-interface GpuSizerState {
-  params: GpuSizerParams | null;
+interface RecommendState {
+  params: RecommendParams | null;
   isLoading: boolean;
-  result: GpuSizerResult | null;
+  result: RecommendResult | null;
   error: string | null;
   errorCode: string | null;
   elapsed: number;
@@ -29,11 +29,11 @@ interface GpuSizerState {
   debugResponse: Record<string, unknown> | null;
   debugStatus: number | null;
   debugDuration: number | null;
-  startSizing: (params: GpuSizerParams) => void;
+  startSizing: (params: RecommendParams) => void;
   reset: () => void;
 }
 
-const GpuSizerContext = React.createContext<GpuSizerState>({
+const RecommendContext = React.createContext<RecommendState>({
   params: null,
   isLoading: false,
   result: null,
@@ -48,10 +48,10 @@ const GpuSizerContext = React.createContext<GpuSizerState>({
   reset: () => {},
 });
 
-export function GpuSizerProvider({ children }: { children: React.ReactNode }) {
-  const [params, setParams] = React.useState<GpuSizerParams | null>(null);
+export function RecommendProvider({ children }: { children: React.ReactNode }) {
+  const [params, setParams] = React.useState<RecommendParams | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
-  const [result, setResult] = React.useState<GpuSizerResult | null>(null);
+  const [result, setResult] = React.useState<RecommendResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [errorCode, setErrorCode] = React.useState<string | null>(null);
   const [elapsed, setElapsed] = React.useState(0);
@@ -77,7 +77,7 @@ export function GpuSizerProvider({ children }: { children: React.ReactNode }) {
     return clearTimer;
   }, [isLoading, clearTimer]);
 
-  const startSizing = React.useCallback((p: GpuSizerParams) => {
+  const startSizing = React.useCallback((p: RecommendParams) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -132,7 +132,7 @@ export function GpuSizerProvider({ children }: { children: React.ReactNode }) {
           setError(data.error?.message || 'Unknown error');
           setErrorCode(data.error?.code || 'UNKNOWN');
         } else {
-          setResult(data as GpuSizerResult);
+          setResult(data as RecommendResult);
         }
       })
       .catch(err => {
@@ -160,18 +160,18 @@ export function GpuSizerProvider({ children }: { children: React.ReactNode }) {
     setDebugDuration(null);
   }, []);
 
-  const value = React.useMemo<GpuSizerState>(
+  const value = React.useMemo<RecommendState>(
     () => ({ params, isLoading, result, error, errorCode, elapsed, debugRequest, debugResponse, debugStatus, debugDuration, startSizing, reset }),
     [params, isLoading, result, error, errorCode, elapsed, debugRequest, debugResponse, debugStatus, debugDuration, startSizing, reset]
   );
 
   return (
-    <GpuSizerContext.Provider value={value}>
+    <RecommendContext.Provider value={value}>
       {children}
-    </GpuSizerContext.Provider>
+    </RecommendContext.Provider>
   );
 }
 
-export function useGpuSizer(): GpuSizerState {
-  return React.useContext(GpuSizerContext);
+export function useRecommend(): RecommendState {
+  return React.useContext(RecommendContext);
 }

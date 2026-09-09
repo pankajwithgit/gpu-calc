@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { GpuSizerRequestSchema } from '../schemas'
-import { callGpuSizer, generateRequestId } from '../gpu-sizer'
-import type { GpuSizerResult, GpuSizerErrorResponse } from '../gpu-sizer'
+import { RecommendRequestSchema } from '../schemas'
+import { callRecommend, generateRequestId } from '../recommend'
+import type { RecommendResult, RecommendErrorResponse } from '../recommend'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -49,14 +49,14 @@ function mockFetchOk(data: unknown) {
 
 // ─── Schema Tests ────────────────────────────────────────────────────────────
 
-describe('GpuSizerRequestSchema', () => {
+describe('RecommendRequestSchema', () => {
   it('accepts a valid request', () => {
-    const result = GpuSizerRequestSchema.safeParse(VALID_REQUEST)
+    const result = RecommendRequestSchema.safeParse(VALID_REQUEST)
     expect(result.success).toBe(true)
   })
 
   it('rejects when both target_request_rate and target_concurrency are set', () => {
-    const result = GpuSizerRequestSchema.safeParse({
+    const result = RecommendRequestSchema.safeParse({
       ...VALID_REQUEST,
       target_request_rate: 10,
       target_concurrency: 32,
@@ -66,12 +66,12 @@ describe('GpuSizerRequestSchema', () => {
 
   it('rejects when neither target_request_rate nor target_concurrency is set', () => {
     const { target_concurrency, ...rest } = VALID_REQUEST
-    const result = GpuSizerRequestSchema.safeParse(rest)
+    const result = RecommendRequestSchema.safeParse(rest)
     expect(result.success).toBe(false)
   })
 
   it('accepts a model_config object', () => {
-    const result = GpuSizerRequestSchema.safeParse({
+    const result = RecommendRequestSchema.safeParse({
       ...VALID_REQUEST,
       model_config: { hidden_size: 8192, architectures: ['LlamaForCausalLM'] },
     })
@@ -80,51 +80,51 @@ describe('GpuSizerRequestSchema', () => {
 
   it('accepts target_request_rate instead of target_concurrency', () => {
     const { target_concurrency, ...rest } = VALID_REQUEST
-    const result = GpuSizerRequestSchema.safeParse({ ...rest, target_request_rate: 10 })
+    const result = RecommendRequestSchema.safeParse({ ...rest, target_request_rate: 10 })
     expect(result.success).toBe(true)
   })
 
   it('rejects missing model_path', () => {
     const { model_path, ...rest } = VALID_REQUEST
-    const result = GpuSizerRequestSchema.safeParse(rest)
+    const result = RecommendRequestSchema.safeParse(rest)
     expect(result.success).toBe(false)
   })
 
   it('rejects empty model_path', () => {
-    const result = GpuSizerRequestSchema.safeParse({ ...VALID_REQUEST, model_path: '' })
+    const result = RecommendRequestSchema.safeParse({ ...VALID_REQUEST, model_path: '' })
     expect(result.success).toBe(false)
   })
 
   it('rejects missing system', () => {
     const { system, ...rest } = VALID_REQUEST
-    const result = GpuSizerRequestSchema.safeParse(rest)
+    const result = RecommendRequestSchema.safeParse(rest)
     expect(result.success).toBe(false)
   })
 
   it('rejects zero isl', () => {
-    const result = GpuSizerRequestSchema.safeParse({ ...VALID_REQUEST, isl: 0 })
+    const result = RecommendRequestSchema.safeParse({ ...VALID_REQUEST, isl: 0 })
     expect(result.success).toBe(false)
   })
 
   it('rejects negative osl', () => {
-    const result = GpuSizerRequestSchema.safeParse({ ...VALID_REQUEST, osl: -1 })
+    const result = RecommendRequestSchema.safeParse({ ...VALID_REQUEST, osl: -1 })
     expect(result.success).toBe(false)
   })
 
   it('rejects zero ttft', () => {
-    const result = GpuSizerRequestSchema.safeParse({ ...VALID_REQUEST, ttft: 0 })
+    const result = RecommendRequestSchema.safeParse({ ...VALID_REQUEST, ttft: 0 })
     expect(result.success).toBe(false)
   })
 
   it('rejects unknown fields (strict mode)', () => {
-    const result = GpuSizerRequestSchema.safeParse({ ...VALID_REQUEST, extra: 'nope' })
+    const result = RecommendRequestSchema.safeParse({ ...VALID_REQUEST, extra: 'nope' })
     expect(result.success).toBe(false)
   })
 })
 
 // ─── Service Tests ───────────────────────────────────────────────────────────
 
-describe('callGpuSizer', () => {
+describe('callRecommend', () => {
   beforeEach(() => {
     vi.stubEnv('AICONFIGURATOR_GATEWAY_URL', 'https://aiconfigurator.dev')
   })
@@ -137,10 +137,10 @@ describe('callGpuSizer', () => {
   it('returns a normalized response on success', async () => {
     vi.stubGlobal('fetch', mockFetchOk(EXTERNAL_RESPONSE))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('completed')
-    const r = result as GpuSizerResult
+    const r = result as RecommendResult
     expect(r.requestId).toMatch(/^size_/)
     expect(r.recommendation.gpusNeeded).toBe(4)
     expect(r.recommendation.totalGpus).toBe(4)
@@ -165,7 +165,7 @@ describe('callGpuSizer', () => {
     const mockFetch = mockFetchOk(EXTERNAL_RESPONSE)
     vi.stubGlobal('fetch', mockFetch)
 
-    await callGpuSizer(VALID_REQUEST)
+    await callRecommend(VALID_REQUEST)
 
     expect(mockFetch.mock.calls[0][0]).toBe('https://aiconfigurator.dev/recommend')
   })
@@ -174,7 +174,7 @@ describe('callGpuSizer', () => {
     const mockFetch = mockFetchOk(EXTERNAL_RESPONSE)
     vi.stubGlobal('fetch', mockFetch)
 
-    await callGpuSizer(VALID_REQUEST)
+    await callRecommend(VALID_REQUEST)
 
     const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(sentBody.model_path).toBe('meta-llama/Llama-3.1-70B-Instruct')
@@ -192,7 +192,7 @@ describe('callGpuSizer', () => {
     vi.stubGlobal('fetch', mockFetch)
 
     const model_config = { hidden_size: 8192, architectures: ['LlamaForCausalLM'] }
-    await callGpuSizer({ ...VALID_REQUEST, model_config })
+    await callRecommend({ ...VALID_REQUEST, model_config })
 
     const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(sentBody.model_config).toEqual(model_config)
@@ -202,7 +202,7 @@ describe('callGpuSizer', () => {
     const mockFetch = mockFetchOk(EXTERNAL_RESPONSE)
     vi.stubGlobal('fetch', mockFetch)
 
-    await callGpuSizer(VALID_REQUEST)
+    await callRecommend(VALID_REQUEST)
 
     const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(sentBody).not.toHaveProperty('model_config')
@@ -211,10 +211,10 @@ describe('callGpuSizer', () => {
   it('returns AIC_NOT_CONFIGURED when API URL is missing', async () => {
     vi.stubEnv('AICONFIGURATOR_GATEWAY_URL', '')
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_NOT_CONFIGURED')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_NOT_CONFIGURED')
   })
 
   it('returns AIC_TIMEOUT on fetch timeout', async () => {
@@ -222,19 +222,19 @@ describe('callGpuSizer', () => {
     timeoutError.name = 'TimeoutError'
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(timeoutError))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_TIMEOUT')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_TIMEOUT')
   })
 
   it('returns AIC_UNAVAILABLE on network error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_UNAVAILABLE')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_UNAVAILABLE')
   })
 
   it('returns AIC_UNAVAILABLE on 500', async () => {
@@ -244,10 +244,10 @@ describe('callGpuSizer', () => {
       json: () => Promise.resolve({ detail: 'internal error' }),
     }))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_UNAVAILABLE')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_UNAVAILABLE')
   })
 
   it('returns AIC_NO_CONFIGURATION on 422', async () => {
@@ -257,10 +257,10 @@ describe('callGpuSizer', () => {
       json: () => Promise.resolve({ detail: 'No configuration meets the specified requirements.' }),
     }))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_NO_CONFIGURATION')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_NO_CONFIGURATION')
   })
 
   it('returns AIC_INVALID_RESPONSE on non-JSON response', async () => {
@@ -270,19 +270,19 @@ describe('callGpuSizer', () => {
       json: () => Promise.reject(new Error('invalid json')),
     }))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_INVALID_RESPONSE')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_INVALID_RESPONSE')
   })
 
   it('returns AIC_NO_CONFIGURATION when configs array is empty', async () => {
     vi.stubGlobal('fetch', mockFetchOk({ configs: [], chosen_mode: 'agg' }))
 
-    const result = await callGpuSizer(VALID_REQUEST)
+    const result = await callRecommend(VALID_REQUEST)
 
     expect(result.status).toBe('failed')
-    expect((result as GpuSizerErrorResponse).error.code).toBe('AIC_NO_CONFIGURATION')
+    expect((result as RecommendErrorResponse).error.code).toBe('AIC_NO_CONFIGURATION')
   })
 
   it('adds GPU_TOPOLOGY_MISMATCH warning when parallelism does not match GPU count', async () => {
@@ -298,7 +298,7 @@ describe('callGpuSizer', () => {
     }
     vi.stubGlobal('fetch', mockFetchOk(mismatchResponse))
 
-    const result = await callGpuSizer(VALID_REQUEST) as GpuSizerResult
+    const result = await callRecommend(VALID_REQUEST) as RecommendResult
 
     expect(result.status).toBe('completed')
     expect(result.warnings.some(w => w.code === 'GPU_TOPOLOGY_MISMATCH')).toBe(true)
@@ -307,7 +307,7 @@ describe('callGpuSizer', () => {
   it('includes durationMs in metadata', async () => {
     vi.stubGlobal('fetch', mockFetchOk(EXTERNAL_RESPONSE))
 
-    const result = await callGpuSizer(VALID_REQUEST) as GpuSizerResult
+    const result = await callRecommend(VALID_REQUEST) as RecommendResult
 
     expect(result.metadata.durationMs).toBeTypeOf('number')
     expect(result.metadata.durationMs).toBeGreaterThanOrEqual(0)

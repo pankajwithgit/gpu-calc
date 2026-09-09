@@ -40,19 +40,4 @@ export const ApiErrors = {
 
   INVALID_REQUEST: (message: string) =>
     createApiError('invalid_request', message),
-
-  GPU_SIZER_NOT_CONFIGURED: () =>
-    createApiError('gpu_sizer_not_configured', 'GPU sizing service is not configured'),
-
-  GPU_SIZER_AUTH_FAILED: () =>
-    createApiError('gpu_sizer_auth_failed', 'Authentication with GPU sizing service failed'),
-
-  GPU_SIZER_UNAVAILABLE: (detail?: string) =>
-    createApiError('gpu_sizer_unavailable', detail ?? 'GPU sizing service is unreachable'),
-
-  GPU_SIZER_TIMEOUT: () =>
-    createApiError('gpu_sizer_timeout', 'The GPU sizing engine took longer than expected (90s timeout)'),
-
-  GPU_SIZER_INVALID_RESPONSE: (detail?: string) =>
-    createApiError('gpu_sizer_invalid_response', detail ?? 'GPU sizing service returned an invalid response'),
 }

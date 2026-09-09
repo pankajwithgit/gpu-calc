@@ -26,9 +26,9 @@ export const ModelCatalogQuerySchema = z.object({
 
 export type ModelCatalogQuery = z.infer<typeof ModelCatalogQuerySchema>
 
-// ═══ GPU SIZER REQUEST SCHEMA ═══
+// ═══ RECOMMEND REQUEST SCHEMA ═══
 
-export const GpuSizerRequestSchema = z.object({
+export const RecommendRequestSchema = z.object({
   model_path: z.string().min(1, 'model_path is required'),
   system: z.string().min(1, 'system is required'),
   backend: z.string().default('vllm'),
@@ -50,7 +50,7 @@ export const GpuSizerRequestSchema = z.object({
   { message: 'Exactly one of target_request_rate or target_concurrency must be provided' }
 )
 
-export type GpuSizerRequest = z.infer<typeof GpuSizerRequestSchema>
+export type RecommendRequest = z.infer<typeof RecommendRequestSchema>
 
 // ═══ KV CACHE CALCULATOR REQUEST SCHEMA ═══
 

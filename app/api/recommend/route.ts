@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GpuSizerRequestSchema } from '@/lib/api/schemas'
-import { callGpuSizer, generateRequestId } from '@/lib/api/gpu-sizer'
+import { RecommendRequestSchema } from '@/lib/api/schemas'
+import { callRecommend, generateRequestId } from '@/lib/api/recommend'
 
 const ERROR_STATUS_MAP: Record<string, number> = {
   INVALID_REQUEST: 400,
@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
       return proxyToAic(body, include)
     }
 
-    const validated = GpuSizerRequestSchema.parse(body)
-    const result = await callGpuSizer(validated)
+    const validated = RecommendRequestSchema.parse(body)
+    const result = await callRecommend(validated)
 
     if (result.status === 'failed') {
       const httpStatus = ERROR_STATUS_MAP[result.error.code] ?? 500
