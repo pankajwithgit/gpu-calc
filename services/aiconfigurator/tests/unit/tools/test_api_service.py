@@ -613,8 +613,13 @@ class TestIntegration:
     @classmethod
     def setup_class(cls):
         from configiq.systems import load_device_names_from_perf_data
+
         import tools.api_service.app as _app_mod
-        _app_mod._DEVICE_DISPLAY_NAMES = load_device_names_from_perf_data()
+        device_names = load_device_names_from_perf_data()
+        if not device_names:
+            pytest.skip("device display names unavailable")
+        _app_mod._DEVICE_DISPLAY_NAMES = device_names
+        _app_mod._DEVICE_NAMES_LOADED = True
 
     def test_recommend_real(self):
         resp = client.post("/recommend", json={

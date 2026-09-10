@@ -555,6 +555,7 @@ def _architecture_from_sm(sm_version: int) -> str:
 # aiconfigurator SDK (via configiq.systems). aicostings loads the same map from
 # the same source so the two services never drift on GPU naming.
 _DEVICE_DISPLAY_NAMES: dict[str, str] = {}
+_DEVICE_NAMES_LOADED: bool = False
 
 
 def _parse_include(include: str | None) -> set[str]:
@@ -596,8 +597,9 @@ else:
 @app.on_event("startup")
 def startup_event():
     """Load GPU display names from the aiconfigurator SDK at startup."""
-    global _DEVICE_DISPLAY_NAMES
+    global _DEVICE_DISPLAY_NAMES, _DEVICE_NAMES_LOADED
     _DEVICE_DISPLAY_NAMES = load_device_names_from_perf_data()
+    _DEVICE_NAMES_LOADED = bool(_DEVICE_DISPLAY_NAMES)
 
 
 @app.post("/recommend")
@@ -934,7 +936,9 @@ def get_systems(
     for sys_id in sorted(supported_systems()):
         device_name = _DEVICE_DISPLAY_NAMES.get(sys_id)
         if device_name is None:
-            continue
+            if _DEVICE_NAMES_LOADED:
+                continue
+            device_name = sys_id
         entry: dict[str, Any] = {
             "id": sys_id,
             "name": device_name,
