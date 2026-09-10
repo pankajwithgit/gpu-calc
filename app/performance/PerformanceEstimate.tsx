@@ -684,10 +684,6 @@ export default function QuickEstimate() {
   const handleCopyCLICommand = async () => {
     if (!testResult) return;
 
-    const ppFlag = testResult.parallelism_strategy.pp_size > 1
-      ? ` \\\n  --pipeline-parallel-size ${testResult.parallelism_strategy.pp_size}`
-      : '';
-
     // Only FP16/FP8 are valid --dtype values; quantized modes use --quantization
     const dtypeValue = testWeightPrecision === 'FP16' ? 'float16' :
                        testWeightPrecision === 'FP8' ? 'fp8' : 'auto';
@@ -702,13 +698,37 @@ export default function QuickEstimate() {
       ? ` \\\n  --quantization ${quantValue}`
       : '';
 
-    const cliCommand = `vllm serve ${model} \\
+    let cliCommand: string;
+    if (isDisagg) {
+      // A single vllm serve can't express disagg; emit one command per pool and
+      // note the KV-transfer connector needed to wire prefill -> decode.
+      const poolCmd = (role: string, ph: typeof disagg.prefill) => {
+        const ppFlag = ph.pp_size > 1 ? ` \\\n  --pipeline-parallel-size ${ph.pp_size}` : '';
+        return `# ${role} pool — ${ph.workers} worker(s), TP${ph.tp_size}${ph.pp_size > 1 ? ` PP${ph.pp_size}` : ''}, batch ${ph.batch_size}\n` +
+          `vllm serve ${model} \\\n` +
+          `  --tensor-parallel-size ${ph.tp_size}${ppFlag} \\\n` +
+          `  --gpu-memory-utilization 0.90 \\\n` +
+          `  --dtype ${dtypeValue}${quantFlag} \\\n` +
+          `  --kv-cache-dtype ${testKVCachePrecision.toLowerCase()}`;
+      };
+      cliCommand =
+        `# Disaggregated serving: run the prefill and decode pools separately and\n` +
+        `# connect them with a KV-transfer connector (e.g. LMCache / NIXL / Dynamo).\n` +
+        `# Scale each pool to the worker count shown.\n\n` +
+        `${poolCmd('Prefill', disagg.prefill)}\n\n` +
+        `${poolCmd('Decode', disagg.decode)}`;
+    } else {
+      const ppFlag = testResult.parallelism_strategy.pp_size > 1
+        ? ` \\\n  --pipeline-parallel-size ${testResult.parallelism_strategy.pp_size}`
+        : '';
+      cliCommand = `vllm serve ${model} \\
   --tensor-parallel-size ${testResult.memory_analysis.tp_size}${ppFlag} \\
   --max-model-len auto \\
   --gpu-memory-utilization 0.90 \\
   --dtype ${dtypeValue}${quantFlag} \\
   --kv-cache-dtype ${testKVCachePrecision.toLowerCase()} \\
   --max-num-seqs ${testResult.vllm_config?.max_num_seqs || 256}${testResult.vllm_config?.enable_chunked_prefill ? ' \\\n  --enable-chunked-prefill' : ''}`;
+    }
 
     try {
       await navigator.clipboard.writeText(cliCommand);

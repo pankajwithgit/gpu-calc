@@ -278,6 +278,12 @@ export async function callRecommend(
 
   const durationMs = Math.round(performance.now() - startTime)
 
+  // The gateway reports concurrency, request rate, and tokens/s per replica;
+  // scale to cluster totals so the headline matches the whole deployment.
+  // Per-GPU and per-user rates are already per-unit and stay as-is.
+  const clusterConcurrency = Math.round(((best.concurrency as number) ?? 0) * replicasNeeded)
+  const clusterTokensPerSecond = ((best.tokens_per_second as number) ?? 0) * replicasNeeded
+
   return {
     requestId,
     status: 'completed',
@@ -300,10 +306,10 @@ export async function callRecommend(
       ttftLatencyMs: (best.ttft as number) ?? 0,
       tpotMs: (best.tpot as number) ?? 0,
       requestLatencyMs: (best.request_latency as number) ?? 0,
-      concurrency: (best.concurrency as number) ?? 0,
+      concurrency: clusterConcurrency,
     },
     throughput: {
-      tokensPerSecond: (best.tokens_per_second as number) ?? 0,
+      tokensPerSecond: clusterTokensPerSecond,
       tokensPerSecondPerGpu: (best.tokens_per_second_per_gpu as number) ?? 0,
       tokensPerSecondPerUser: (best.tokens_per_second_per_user as number) ?? 0,
     },
