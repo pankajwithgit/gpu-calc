@@ -5,5 +5,6 @@ export type {
   VLLMConfig,
   BottleneckAnalysis,
   ParallelismStrategy,
-  LLMDConfig
+  LLMDConfig,
+  EstimatePhase
 } from './types'

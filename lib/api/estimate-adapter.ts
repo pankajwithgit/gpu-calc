@@ -184,6 +184,11 @@ export async function fetchEstimateAsInferenceResult(
     ? { prefill: buildPhase(data.prefill_config, input.prefill!), decode: buildPhase(data.decode_config, input.decode!) }
     : undefined
 
+  const warnings: string[] = hasBreakdown ? [] : ['Memory breakdown estimated (no backend_version specified).']
+  if (input.mode === 'disagg' && !isDisagg) {
+    warnings.push('Disaggregated mode was requested but the backend returned an aggregated estimate.')
+  }
+
   return {
     mode: isDisagg ? 'disagg' : 'agg',
     disagg,
@@ -221,6 +226,6 @@ export async function fetchEstimateAsInferenceResult(
       dcgm_metrics: ['DCGM_FI_PROF_GR_ENGINE_ACTIVE', 'DCGM_FI_DEV_FB_USED'],
       vllm_metrics: ['vllm:num_requests_running', 'vllm:gpu_cache_usage_perc'],
     },
-    warnings: hasBreakdown ? [] : ['Memory breakdown estimated (no backend_version specified).'],
+    warnings,
   }
 }

@@ -888,6 +888,11 @@ class TestEstimate:
         assert kwargs["prefill_num_workers"] == 4
         assert kwargs["decode_tp_size"] == 4
 
+    def test_invalid_mode_rejected(self):
+        body = {**VALID_ESTIMATE_BODY, "mode": "bogus"}
+        resp = client.post("/estimate", json=body)
+        assert resp.status_code == 422
+
     def test_requires_model_path(self):
         body = {**VALID_ESTIMATE_BODY}
         del body["model_path"]

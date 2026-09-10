@@ -14,7 +14,7 @@ import logging
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 import uvicorn
@@ -106,7 +106,7 @@ class EstimateRequest(BaseModel):
     # Serving mode. When 'disagg', the prefill_*/decode_* fields below drive
     # separate prefill and decode pools; the top-level tp/pp/batch fields act
     # as fallbacks for any per-role field left unset.
-    mode: str = Field(default="agg", description="Serving mode: 'agg' or 'disagg'.")
+    mode: Literal["agg", "disagg"] = Field(default="agg", description="Serving mode: 'agg' or 'disagg'.")
     decode_system: str | None = Field(default=None, description="GPU system for disagg decode workers; defaults to `system`.")
     prefill_tp_size: int | None = Field(default=None)
     prefill_pp_size: int | None = Field(default=None)
@@ -803,11 +803,16 @@ def post_estimate(
         )
 
         if want_memory:
+            # The decode pool may run on a different GPU system than prefill.
+            decode_sys = req.decode_system or req.system
             with _with_model_config(req.model_path, req.model_config_data) as effective_path:
-                for worker in (resp.prefill_config, resp.decode_config):
+                for worker, worker_sys in (
+                    (resp.prefill_config, req.system),
+                    (resp.decode_config, decode_sys),
+                ):
                     if worker and worker.tp:
                         worker.memory_breakdown = _build_memory_breakdown(
-                            effective_path, req.system, req.backend, req.backend_version,
+                            effective_path, worker_sys, req.backend, req.backend_version,
                             worker.tp, worker.pp or 1, req.isl, req.osl,
                             worker.batch_size or req.batch_size,
                             gemm_q, kv_q, worker.moe_tp, worker.moe_ep,

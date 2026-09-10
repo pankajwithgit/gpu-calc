@@ -38,7 +38,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
 import { getAppConfig } from '@/lib/app-config';
 import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
-import type { InferenceConfigResult } from '@/lib/gpu-math/inference-config';
+import type { EstimatePhase, InferenceConfigResult } from '@/lib/gpu-math/inference-config';
 import Link from 'next/link';
 import { HOURS_PER_MONTH, AMORT_MONTHS_3YR, AMORT_MONTHS_5YR } from '@/lib/utils/format';
 
@@ -702,7 +702,7 @@ export default function QuickEstimate() {
     if (isDisagg) {
       // A single vllm serve can't express disagg; emit one command per pool and
       // note the KV-transfer connector needed to wire prefill -> decode.
-      const poolCmd = (role: string, ph: typeof disagg.prefill) => {
+      const poolCmd = (role: string, ph: EstimatePhase) => {
         const ppFlag = ph.pp_size > 1 ? ` \\\n  --pipeline-parallel-size ${ph.pp_size}` : '';
         return `# ${role} pool — ${ph.workers} worker(s), TP${ph.tp_size}${ph.pp_size > 1 ? ` PP${ph.pp_size}` : ''}, batch ${ph.batch_size}\n` +
           `vllm serve ${model} \\\n` +
