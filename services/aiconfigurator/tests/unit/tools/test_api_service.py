@@ -847,6 +847,47 @@ class TestEstimate:
         assert kwargs["tp_size"] == 2
         assert kwargs["batch_size"] == 128
 
+    @patch("tools.api_service.app.cli_estimate")
+    def test_disagg_mode(self, mock_estimate):
+        mock = MagicMock()
+        mock.ttft = 500.0
+        mock.tpot = 30.0
+        mock.power_w = 0.0
+        mock.raw = {
+            "ttft": 500.0, "tpot": 30.0, "request_latency": 30000.0,
+            "tokens/s": 1000.0, "tokens/s/gpu": 250.0, "tokens/s/user": 40.0,
+            "bs": np.int64(64), "system": "h200_sxm", "backend": "vllm",
+            "version": "0.24.0", "gemm": "bfloat16", "kvcache": "bfloat16",
+            "(p)memory": 60.0, "(d)memory": 72.5,
+        }
+        mock_estimate.return_value = mock
+        body = {
+            **VALID_ESTIMATE_BODY,
+            "mode": "disagg",
+            "prefill_tp_size": 1, "prefill_pp_size": 1,
+            "prefill_num_workers": 4, "prefill_batch_size": 1,
+            "decode_tp_size": 4, "decode_pp_size": 1,
+            "decode_num_workers": 1, "decode_batch_size": 64,
+        }
+        resp = client.post("/estimate", json=body)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mode"] == "disagg"
+        # Top-level parallelism is None for disagg; see prefill/decode_config.
+        assert data["tp"] is None
+        assert data["prefill_config"]["tp"] == 1
+        assert data["prefill_config"]["num_workers"] == 4
+        assert data["prefill_config"]["batch_size"] == 1
+        assert data["decode_config"]["tp"] == 4
+        assert data["decode_config"]["batch_size"] == 64
+        # Per-GPU peak is the worst case across pools, not summed.
+        assert data["memory"] == pytest.approx(72.5)
+        # SDK invoked in disagg mode with the per-role params.
+        kwargs = mock_estimate.call_args.kwargs
+        assert kwargs["mode"] == "disagg"
+        assert kwargs["prefill_num_workers"] == 4
+        assert kwargs["decode_tp_size"] == 4
+
     def test_requires_model_path(self):
         body = {**VALID_ESTIMATE_BODY}
         del body["model_path"]

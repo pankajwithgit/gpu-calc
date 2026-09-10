@@ -103,6 +103,23 @@ class EstimateRequest(BaseModel):
     moe_tp_size: int | None = Field(default=None)
     moe_ep_size: int | None = Field(default=None)
     attention_dp_size: int = Field(default=1)
+    # Serving mode. When 'disagg', the prefill_*/decode_* fields below drive
+    # separate prefill and decode pools; the top-level tp/pp/batch fields act
+    # as fallbacks for any per-role field left unset.
+    mode: str = Field(default="agg", description="Serving mode: 'agg' or 'disagg'.")
+    decode_system: str | None = Field(default=None, description="GPU system for disagg decode workers; defaults to `system`.")
+    prefill_tp_size: int | None = Field(default=None)
+    prefill_pp_size: int | None = Field(default=None)
+    prefill_moe_tp_size: int | None = Field(default=None)
+    prefill_moe_ep_size: int | None = Field(default=None)
+    prefill_batch_size: int | None = Field(default=None)
+    prefill_num_workers: int | None = Field(default=None)
+    decode_tp_size: int | None = Field(default=None)
+    decode_pp_size: int | None = Field(default=None)
+    decode_moe_tp_size: int | None = Field(default=None)
+    decode_moe_ep_size: int | None = Field(default=None)
+    decode_batch_size: int | None = Field(default=None)
+    decode_num_workers: int | None = Field(default=None)
     inclusive_tpot: bool = Field(
         default=False,
         description="Report TPOT as (ttft + tpot * (osl - 1)) / osl, spreading TTFT across all output tokens. "
@@ -223,6 +240,10 @@ class EstimateResponse(BaseModel):
     power_w: float | None = None
     serving_config: ServingConfig | None = None
     memory_breakdown: MemoryBreakdown | None = None
+    # Serving mode + disagg detail (present when mode='disagg')
+    mode: str = "agg"
+    prefill_config: WorkerConfig | None = None
+    decode_config: WorkerConfig | None = None
 
 
 class MemoryRequest(BaseModel):
@@ -663,26 +684,70 @@ def post_estimate(
     Use this when you know your deployment configuration and want to predict
     its performance. Use /recommend when you want to find the optimal config.
     """
+    is_disagg = req.mode == "disagg"
+
+    # Resolve per-role parallelism, falling back to the top-level agg fields.
+    p_tp = req.prefill_tp_size or req.tp_size
+    p_pp = req.prefill_pp_size or req.pp_size
+    p_bs = req.prefill_batch_size or req.batch_size
+    p_workers = req.prefill_num_workers or 1
+    p_moe_tp = req.prefill_moe_tp_size or req.moe_tp_size
+    p_moe_ep = req.prefill_moe_ep_size or req.moe_ep_size
+    d_tp = req.decode_tp_size or req.tp_size
+    d_pp = req.decode_pp_size or req.pp_size
+    d_bs = req.decode_batch_size or req.batch_size
+    d_workers = req.decode_num_workers or 1
+    d_moe_tp = req.decode_moe_tp_size or req.moe_tp_size
+    d_moe_ep = req.decode_moe_ep_size or req.moe_ep_size
+
     try:
         with _with_model_config(req.model_path, req.model_config_data) as effective_path:
-            result = cli_estimate(
-                effective_path,
-                system_name=req.system,
-                backend_name=req.backend,
-                backend_version=req.backend_version,
-                database_mode=req.database_mode,
-                isl=req.isl,
-                osl=req.osl,
-                batch_size=req.batch_size,
-                tp_size=req.tp_size,
-                pp_size=req.pp_size,
-                attention_dp_size=req.attention_dp_size,
-                moe_tp_size=req.moe_tp_size,
-                moe_ep_size=req.moe_ep_size,
-                gemm_quant_mode=req.gemm_quant_mode,
-                kvcache_quant_mode=req.kvcache_quant_mode,
-                fmha_quant_mode=req.fmha_quant_mode,
-            )
+            if is_disagg:
+                result = cli_estimate(
+                    effective_path,
+                    system_name=req.system,
+                    decode_system_name=req.decode_system,
+                    backend_name=req.backend,
+                    backend_version=req.backend_version,
+                    database_mode=req.database_mode,
+                    mode="disagg",
+                    isl=req.isl,
+                    osl=req.osl,
+                    prefill_tp_size=p_tp,
+                    prefill_pp_size=p_pp,
+                    prefill_moe_tp_size=p_moe_tp,
+                    prefill_moe_ep_size=p_moe_ep,
+                    prefill_batch_size=p_bs,
+                    prefill_num_workers=p_workers,
+                    decode_tp_size=d_tp,
+                    decode_pp_size=d_pp,
+                    decode_moe_tp_size=d_moe_tp,
+                    decode_moe_ep_size=d_moe_ep,
+                    decode_batch_size=d_bs,
+                    decode_num_workers=d_workers,
+                    gemm_quant_mode=req.gemm_quant_mode,
+                    kvcache_quant_mode=req.kvcache_quant_mode,
+                    fmha_quant_mode=req.fmha_quant_mode,
+                )
+            else:
+                result = cli_estimate(
+                    effective_path,
+                    system_name=req.system,
+                    backend_name=req.backend,
+                    backend_version=req.backend_version,
+                    database_mode=req.database_mode,
+                    isl=req.isl,
+                    osl=req.osl,
+                    batch_size=req.batch_size,
+                    tp_size=req.tp_size,
+                    pp_size=req.pp_size,
+                    attention_dp_size=req.attention_dp_size,
+                    moe_tp_size=req.moe_tp_size,
+                    moe_ep_size=req.moe_ep_size,
+                    gemm_quant_mode=req.gemm_quant_mode,
+                    kvcache_quant_mode=req.kvcache_quant_mode,
+                    fmha_quant_mode=req.fmha_quant_mode,
+                )
     except (ValueError, AttributeError, Exception) as e:
         _common_error_handler(e, "estimate", req.model_path, req.backend, req.system)
 
@@ -702,16 +767,52 @@ def post_estimate(
         tokens_per_second_per_user=_coerce_float(raw.get("tokens/s/user")),
         memory=_coerce_float(raw.get("memory")),
         concurrency=_coerce_int(raw.get("bs")),
-        tp=_coerce_int(raw.get("tp")) or req.tp_size,
-        pp=_coerce_int(raw.get("pp")) or req.pp_size,
-        dp=_coerce_int(raw.get("dp")),
+        tp=None if is_disagg else (_coerce_int(raw.get("tp")) or req.tp_size),
+        pp=None if is_disagg else (_coerce_int(raw.get("pp")) or req.pp_size),
+        dp=None if is_disagg else _coerce_int(raw.get("dp")),
         system=raw.get("system", req.system),
         backend=raw.get("backend", req.backend),
         backend_version=raw.get("version", req.backend_version),
         gemm=raw.get("gemm"),
         kvcache=raw.get("kvcache"),
         power_w=result.power_w,
+        mode=req.mode,
     )
+
+    if is_disagg:
+        # (p)/(d)memory are per-GPU peaks; the single figure is the worst case.
+        p_mem = _coerce_float(raw.get("(p)memory"))
+        d_mem = _coerce_float(raw.get("(d)memory"))
+        phase_mems = [m for m in (p_mem, d_mem) if m is not None]
+        if phase_mems:
+            resp.memory = max(phase_mems)
+
+        gemm_q = req.gemm_quant_mode if req.gemm_quant_mode and req.gemm_quant_mode != "half" else None
+        kv_q = req.kvcache_quant_mode if req.kvcache_quant_mode and req.kvcache_quant_mode != "half" else None
+        want_memory = "memory" in includes
+
+        resp.prefill_config = WorkerConfig(
+            tp=p_tp, pp=p_pp, moe_tp=p_moe_tp, moe_ep=p_moe_ep,
+            num_workers=p_workers, batch_size=p_bs, memory_gb=p_mem,
+            backend_version=resp.backend_version,
+        )
+        resp.decode_config = WorkerConfig(
+            tp=d_tp, pp=d_pp, moe_tp=d_moe_tp, moe_ep=d_moe_ep,
+            num_workers=d_workers, batch_size=d_bs, memory_gb=d_mem,
+            backend_version=resp.backend_version,
+        )
+
+        if want_memory:
+            with _with_model_config(req.model_path, req.model_config_data) as effective_path:
+                for worker in (resp.prefill_config, resp.decode_config):
+                    if worker and worker.tp:
+                        worker.memory_breakdown = _build_memory_breakdown(
+                            effective_path, req.system, req.backend, req.backend_version,
+                            worker.tp, worker.pp or 1, req.isl, req.osl,
+                            worker.batch_size or req.batch_size,
+                            gemm_q, kv_q, worker.moe_tp, worker.moe_ep,
+                        )
+        return resp
 
     if "config" in includes:
         resp.serving_config = _build_serving_config(

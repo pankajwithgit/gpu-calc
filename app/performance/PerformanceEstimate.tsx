@@ -46,6 +46,50 @@ function modelSuggestions(): string {
   return getAppConfig().suggestedModelNames.join(', ');
 }
 
+/** String-backed parallelism inputs for one disagg pool (prefill/decode). */
+interface PerfPhaseInput {
+  tp: string
+  pp: string
+  workers: string
+  batch: string
+}
+
+function parsePerfPhase(p: PerfPhaseInput) {
+  const n = (v: string, min = 1) => Math.max(min, parseInt(v, 10) || min);
+  return { tp: n(p.tp), pp: n(p.pp), workers: n(p.workers), batch: n(p.batch) };
+}
+
+/** Four inputs (TP/PP/Workers/Batch) for one disagg pool. */
+function PerfPhaseFields({ title, cfg, onChange }: {
+  title: string;
+  cfg: PerfPhaseInput;
+  onChange: (c: PerfPhaseInput) => void;
+}) {
+  const digits = (v: string) => v.replace(/[^0-9]/g, '');
+  const field = (label: string, key: keyof PerfPhaseInput) => (
+    <div className={styles.accField}>
+      <label className={styles.accFieldLabel}>{label}</label>
+      <TextInput
+        type="number"
+        value={cfg[key]}
+        aria-label={`${title} ${label}`}
+        onChange={(_, v) => onChange({ ...cfg, [key]: digits(v) })}
+      />
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ fontSize: '13px', fontWeight: 600, fontFamily: 'var(--mono)', color: '#3c3f42', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+        {field('TP', 'tp')}
+        {field('PP', 'pp')}
+        {field('Workers', 'workers')}
+        {field('Batch', 'batch')}
+      </div>
+    </div>
+  );
+}
+
 
 const QUICK_ESTIMATE_TOUR: TourStep[] = [
   {
@@ -167,7 +211,12 @@ export default function QuickEstimate() {
   const [testKVCachePrecision, setTestKVCachePrecision] = React.useState<'FP16' | 'FP8' | 'NVFP4'>('FP16');
   const [testMoeQuantMode, setTestMoeQuantMode] = React.useState<'w4a16_mxfp4' | 'w4a8_mxfp4_mxfp8' | 'w4a16_mxfp4_cutlass' | 'w4a8_mxfp4_mxfp8_trtllm'>('w4a16_mxfp4');
   const [testPpSize, setTestPpSize] = React.useState(1);
-  
+
+  // Disagg: prefill and decode pools with independent parallelism / batch.
+  const [servingMode, setServingMode] = React.useState<'agg' | 'disagg'>('agg');
+  const [prefillCfg, setPrefillCfg] = React.useState<PerfPhaseInput>({ tp: '1', pp: '1', workers: '1', batch: '1' });
+  const [decodeCfg, setDecodeCfg] = React.useState<PerfPhaseInput>({ tp: '1', pp: '1', workers: '1', batch: '64' });
+
   const [islInput, setIslInput] = React.useState('2048');
   const [oslInput, setOslInput] = React.useState('128');
   const [concurrentUsersInput, setConcurrentUsersInput] = React.useState('1');
@@ -330,6 +379,11 @@ export default function QuickEstimate() {
                           testWeightPrecision === 'NVFP4' ? 'nvfp4' : null,
           moe_quant_mode: isMoe ? testMoeQuantMode : undefined,
           ...(isMoe && { moe_ep_size: testTpSize }),
+          ...(servingMode === 'disagg' && {
+            mode: 'disagg' as const,
+            prefill: parsePerfPhase(prefillCfg),
+            decode: parsePerfPhase(decodeCfg),
+          }),
         });
         if (!cancelled) {
           setTestResult(result);
@@ -428,10 +482,17 @@ export default function QuickEstimate() {
   const memTotalVram = testResult?.memory_analysis.total_vram_gb ?? 0
   const memKvBudget = testResult?.memory_analysis.kv_cache_budget_gb ?? 0
 
+  // Disagg detail (present only when the estimate ran in disagg mode).
+  const disagg = testResult?.mode === 'disagg' ? testResult.disagg ?? null : null;
+  const isDisagg = disagg != null;
+
   // animated headline numbers
-  // Calculate real values from inference engine
+  // Calculate real values from inference engine. Disagg = sum of each pool's
+  // workers × gpus/worker; agg = tp × replicas × pp.
   const realGpuCount = testResult ?
-    testResult.memory_analysis.tp_size * testResult.memory_analysis.replicas * (testResult.parallelism_strategy.pp_size || 1) :
+    (isDisagg
+      ? disagg.prefill.workers * disagg.prefill.gpusPerWorker + disagg.decode.workers * disagg.decode.gpusPerWorker
+      : testResult.memory_analysis.tp_size * testResult.memory_analysis.replicas * (testResult.parallelism_strategy.pp_size || 1)) :
     0;
 
   const realWeightGB = testResult ?
@@ -590,9 +651,20 @@ export default function QuickEstimate() {
       ...(testWeightPrecision === 'MXFP4' && { gemm_quant_mode: 'mxfp4' }),
       ...(testWeightPrecision === 'NVFP4' && { gemm_quant_mode: 'nvfp4' }),
       ...(testKVCachePrecision === 'FP8' && { kvcache_quant_mode: 'fp8' }),
-      ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' })
+      ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' }),
+      ...(servingMode === 'disagg' && {
+        mode: 'disagg',
+        prefill_tp_size: parsePerfPhase(prefillCfg).tp,
+        prefill_pp_size: parsePerfPhase(prefillCfg).pp,
+        prefill_num_workers: parsePerfPhase(prefillCfg).workers,
+        prefill_batch_size: parsePerfPhase(prefillCfg).batch,
+        decode_tp_size: parsePerfPhase(decodeCfg).tp,
+        decode_pp_size: parsePerfPhase(decodeCfg).pp,
+        decode_num_workers: parsePerfPhase(decodeCfg).workers,
+        decode_batch_size: parsePerfPhase(decodeCfg).batch,
+      })
     };
-  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, currentAicGpu, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision]);
+  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, currentAicGpu, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision, servingMode, prefillCfg, decodeCfg]);
 
   // Copy API request body to clipboard
   const handleCopyAPIRequest = async () => {
@@ -1047,6 +1119,24 @@ export default function QuickEstimate() {
 
       </div>
 
+      {/* ---------- serving mode (agg / disagg) ---------- */}
+      <div className={`${styles.card}`} style={{ padding: '14px 18px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#3c3f42', whiteSpace: 'nowrap' }}>Serving mode:</span>
+          <Button variant={servingMode === 'agg' ? 'secondary' : 'tertiary'} size="sm" onClick={() => setServingMode('agg')}>Aggregated</Button>
+          <Button variant={servingMode === 'disagg' ? 'secondary' : 'tertiary'} size="sm" onClick={() => setServingMode('disagg')}>Disaggregated</Button>
+          {servingMode === 'disagg' && (
+            <span style={{ fontSize: '12px', color: '#54585c' }}>Prefill and decode run on separate GPU pools.</span>
+          )}
+        </div>
+        {servingMode === 'disagg' && (
+          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <PerfPhaseFields title="Prefill pool" cfg={prefillCfg} onChange={setPrefillCfg} />
+            <PerfPhaseFields title="Decode pool" cfg={decodeCfg} onChange={setDecodeCfg} />
+          </div>
+        )}
+      </div>
+
       {/* ---------- workload presets ---------- */}
       {hydrated && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -1212,7 +1302,11 @@ export default function QuickEstimate() {
               <span className={styles.tileValue}>{Math.round(gpus)}<span className={styles.tileUnit}>× {gpu}</span></span>
               <span className={styles.tileSub}>
                 {testResult ? (
-                  <>TP={testResult.memory_analysis.tp_size}{testResult.parallelism_strategy.pp_size > 1 ? ` × PP=${testResult.parallelism_strategy.pp_size}` : ''} × {testResult.memory_analysis.replicas} replica{testResult.memory_analysis.replicas > 1 ? 's' : ''} · {testConcurrentUsers} concurrent users</>
+                  isDisagg ? (
+                    <>disagg · prefill {disagg.prefill.workers}×{disagg.prefill.gpusPerWorker} + decode {disagg.decode.workers}×{disagg.decode.gpusPerWorker} · {testConcurrentUsers} concurrent users</>
+                  ) : (
+                    <>TP={testResult.memory_analysis.tp_size}{testResult.parallelism_strategy.pp_size > 1 ? ` × PP=${testResult.parallelism_strategy.pp_size}` : ''} × {testResult.memory_analysis.replicas} replica{testResult.memory_analysis.replicas > 1 ? 's' : ''} · {testConcurrentUsers} concurrent users</>
+                  )
                 ) : (
                   <>Configure workload below to see results</>
                 )}
@@ -1223,7 +1317,13 @@ export default function QuickEstimate() {
             <>
               <div className={styles.backTitle}>How we got {Math.round(gpus)}</div>
               <div className={styles.formula}>
-                {testResult ? (
+                {testResult && isDisagg ? (
+                  <>
+                    prefill = <span className={styles.em}>{disagg.prefill.workers} × {disagg.prefill.gpusPerWorker} = {disagg.prefill.workers * disagg.prefill.gpusPerWorker}</span> GPUs<br />
+                    decode = <span className={styles.em}>{disagg.decode.workers} × {disagg.decode.gpusPerWorker} = {disagg.decode.workers * disagg.decode.gpusPerWorker}</span> GPUs<br />
+                    total = <span className={styles.em}>{disagg.prefill.workers * disagg.prefill.gpusPerWorker} + {disagg.decode.workers * disagg.decode.gpusPerWorker} = {Math.round(gpus)} GPUs</span>
+                  </>
+                ) : testResult ? (
                   <>
                     weight memory = <span className={styles.em}>{testResult.memory_analysis.weight_gb.toFixed(1)} GB</span><br />
                     usable / GPU = <span className={styles.em}>{memUsablePerGpu.toFixed(0)} GB</span><br />
@@ -1248,6 +1348,7 @@ export default function QuickEstimate() {
         />
         </div>
 
+        {!isDisagg && (
         <div>
           <FlipTile
             front={
@@ -1291,7 +1392,36 @@ export default function QuickEstimate() {
           }
         />
         </div>
+        )}
 
+        {isDisagg && ([['Prefill', disagg.prefill], ['Decode', disagg.decode]] as const).map(([name, ph]) => (
+          <div key={name}>
+            <FlipTile
+              front={
+                <>
+                  <span className={styles.tileLabel}><MicrochipIcon /> {name} pool</span>
+                  <span className={styles.tileValue}>{ph.workers * ph.gpusPerWorker}<span className={styles.tileUnit}>GPUs</span></span>
+                  <span className={styles.tileSub}>
+                    {ph.workers} × {ph.gpusPerWorker}/worker · TP{ph.tp_size}{ph.pp_size > 1 ? ` · PP${ph.pp_size}` : ''} · bs {ph.batch_size}
+                  </span>
+                </>
+              }
+              back={
+                <>
+                  <div className={styles.backTitle}>{name} pool</div>
+                  <div className={styles.formula}>
+                    gpus/worker = {ph.tp_size}{ph.pp_size > 1 ? ` × ${ph.pp_size}` : ''} = <span className={styles.em}>{ph.gpusPerWorker}</span><br />
+                    workers = <span className={styles.em}>{ph.workers}</span> · bs = <span className={styles.em}>{ph.batch_size}</span><br />
+                    {ph.memory_gb != null && <>peak mem/GPU = <span className={styles.em}>{ph.memory_gb.toFixed(1)} GB</span><br /></>}
+                    pool = <span className={styles.em}>{ph.workers} × {ph.gpusPerWorker} = {ph.workers * ph.gpusPerWorker} GPUs</span>
+                  </div>
+                </>
+              }
+            />
+          </div>
+        ))}
+
+        {!isDisagg && (
         <div>
           <FlipTile
             front={
@@ -1334,6 +1464,7 @@ export default function QuickEstimate() {
             }
           />
         </div>
+        )}
 
         {costingsEnabled && gpuPricePerHour == null && !costings.isLoading && (
           <div style={{
@@ -1472,8 +1603,8 @@ export default function QuickEstimate() {
       </div>
       )}
 
-      {/* ---------- Why this GPU count ---------- */}
-      {testResult && (
+      {/* ---------- Why this GPU count (agg only) ---------- */}
+      {testResult && !isDisagg && (
         <div className={styles.card} style={{ marginBottom: 20 }}>
           <div
             className={styles.cardHead}
@@ -1569,8 +1700,8 @@ export default function QuickEstimate() {
         </div>
       )}
 
-      {/* ---------- Memory Layout ---------- */}
-      {testResult && (
+      {/* ---------- Memory Layout (agg only) ---------- */}
+      {testResult && !isDisagg && (
         <div className={styles.card} style={{ marginBottom: 20 }}>
           <div className={styles.cardHead}>
             <span className={styles.cardTitle}>Memory layout per GPU</span>

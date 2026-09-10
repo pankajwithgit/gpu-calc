@@ -8,7 +8,7 @@
  * for an optimal config.
  */
 
-import type { InferenceConfigResult } from '@/lib/gpu-math/inference-config/types'
+import type { EstimatePhase, InferenceConfigResult } from '@/lib/gpu-math/inference-config/types'
 
 const GB = 1_073_741_824
 
@@ -38,6 +38,17 @@ export interface EstimateAdapterInput {
   prefix?: number
   kvcache_quant_mode?: string | null
   gemm_quant_mode?: string | null
+  // Disagg: when mode='disagg', prefill/decode drive separate pools.
+  mode?: 'agg' | 'disagg'
+  prefill?: EstimatePhaseInput
+  decode?: EstimatePhaseInput
+}
+
+export interface EstimatePhaseInput {
+  tp: number
+  pp: number
+  workers: number
+  batch: number
 }
 
 function isMoeConfig(config: Record<string, unknown> | null | undefined): boolean {
@@ -93,6 +104,20 @@ export async function fetchEstimateAsInferenceResult(
     body.model_config = input.hf_model_config
   }
 
+  // Disagg: send per-pool parallelism. The backend runs cli_estimate in
+  // mode='disagg' and returns prefill_config / decode_config.
+  if (input.mode === 'disagg' && input.prefill && input.decode) {
+    body.mode = 'disagg'
+    body.prefill_tp_size = input.prefill.tp
+    body.prefill_pp_size = input.prefill.pp
+    body.prefill_num_workers = input.prefill.workers
+    body.prefill_batch_size = input.prefill.batch
+    body.decode_tp_size = input.decode.tp
+    body.decode_pp_size = input.decode.pp
+    body.decode_num_workers = input.decode.workers
+    body.decode_batch_size = input.decode.batch
+  }
+
   // MoE models require at least one of moe_ep_size / moe_tp_size.
   // Prefer explicit values; fall back to auto-detecting from hf_model_config.
   if (input.moe_ep_size != null) {
@@ -141,7 +166,27 @@ export async function fetchEstimateAsInferenceResult(
   // With pipeline parallel, weights are sharded across TP×PP GPUs
   const shardCount = tp * pp
 
+  // Disagg: fold the per-pool worker configs into EstimatePhase records.
+  const buildPhase = (wc: Record<string, unknown> | null | undefined, fallback: EstimatePhaseInput): EstimatePhase => {
+    const tpv = (wc?.tp as number) ?? fallback.tp
+    const ppv = (wc?.pp as number) ?? fallback.pp
+    return {
+      workers: (wc?.num_workers as number) ?? fallback.workers,
+      gpusPerWorker: tpv * ppv,
+      tp_size: tpv,
+      pp_size: ppv,
+      batch_size: (wc?.batch_size as number) ?? fallback.batch,
+      memory_gb: (wc?.memory_gb as number | null) ?? null,
+    }
+  }
+  const isDisagg = data.mode === 'disagg' && !!input.prefill && !!input.decode
+  const disagg = isDisagg
+    ? { prefill: buildPhase(data.prefill_config, input.prefill!), decode: buildPhase(data.decode_config, input.decode!) }
+    : undefined
+
   return {
+    mode: isDisagg ? 'disagg' : 'agg',
+    disagg,
     memory_analysis: {
       weight_gb: weightGb,
       weight_gb_per_gpu: weightGb / shardCount,

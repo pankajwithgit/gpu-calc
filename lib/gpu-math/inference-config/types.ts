@@ -94,12 +94,32 @@ export interface LLMDConfig {
   }
 }
 
+/**
+ * One disaggregated pool (prefill or decode) as returned by the /estimate API.
+ * gpusPerWorker = tp·pp; a pool consumes workers × gpusPerWorker GPUs.
+ */
+export interface EstimatePhase {
+  workers: number
+  gpusPerWorker: number
+  tp_size: number
+  pp_size: number
+  batch_size: number
+  memory_gb: number | null
+}
+
 export interface InferenceConfigResult {
   memory_analysis: MemoryAnalysis
   vllm_config: VLLMConfig
   parallelism_strategy: ParallelismStrategy
   bottleneck_analysis: BottleneckAnalysis
   llmd_config?: LLMDConfig
+  /** Serving mode. Defaults to 'agg' when absent. */
+  mode?: 'agg' | 'disagg'
+  /** Per-pool detail (disagg only). */
+  disagg?: {
+    prefill: EstimatePhase
+    decode: EstimatePhase
+  }
   diagnostics: {
     nvidia_smi_watch: string
     dcgm_metrics: string[]
