@@ -41,6 +41,7 @@ import { DEFAULT_WORKLOAD, type WorkloadPreset } from '@/lib/workload-presets';
 import type { EstimatePhase, InferenceConfigResult } from '@/lib/gpu-math/inference-config';
 import Link from 'next/link';
 import { HOURS_PER_MONTH, AMORT_MONTHS_3YR, AMORT_MONTHS_5YR } from '@/lib/utils/format';
+import { parsePerformancePrefill } from './performance-prefill';
 
 function modelSuggestions(): string {
   return getAppConfig().suggestedModelNames.join(', ');
@@ -126,6 +127,16 @@ export default function QuickEstimate() {
 
   const [model, setModel] = React.useState('');
   const [gpu, setGpu] = React.useState(() => getAppConfig().defaultSystem);
+  const [prefillChecked, setPrefillChecked] = React.useState(false);
+  const modelWasPrefilled = React.useRef(false);
+
+  React.useEffect(() => {
+    const prefill = parsePerformancePrefill(globalThis.location?.search || '');
+    modelWasPrefilled.current = Boolean(prefill.model);
+    if (prefill.model) setModel(prefill.model);
+    if (prefill.system) setGpu(prefill.system);
+    setPrefillChecked(true);
+  }, []);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrated gates config.json readiness
   const modelItems: ComboBoxItem[] = React.useMemo(() => buildModelItems(aicModels), [aicModels, hydrated]);
@@ -133,17 +144,17 @@ export default function QuickEstimate() {
   // Set model from settings after context has loaded from localStorage
   const modelFromSettings = React.useRef(false);
   React.useEffect(() => {
-    if (!hydrated || modelFromSettings.current) return;
+    if (!hydrated || !prefillChecked || modelFromSettings.current) return;
     modelFromSettings.current = true;
-    setModel(settingsDefaultModel);
-  }, [hydrated, settingsDefaultModel]);
+    if (!modelWasPrefilled.current) setModel(settingsDefaultModel);
+  }, [hydrated, prefillChecked, settingsDefaultModel]);
 
   // If defaultSystem not in catalog, fall back to first available
   React.useEffect(() => {
-    if (aicGpus.length > 0 && !aicGpus.find(g => g.systemId === gpu)) {
+    if (prefillChecked && aicGpus.length > 0 && !aicGpus.find(g => g.systemId === gpu)) {
       setGpu(aicGpus[0].systemId);
     }
-  }, [aicGpus, gpu]);
+  }, [aicGpus, gpu, prefillChecked]);
 
   const [fav, setFav] = React.useState(false);
   const [expanded, setExpanded] = React.useState<string[]>([]);
@@ -632,6 +643,12 @@ export default function QuickEstimate() {
 
   // Build the /api/estimate request body from current form state and GPU-specific values
   const buildEstimateRequestBody = React.useCallback(() => {
+    const spec = modelSpecs.get(model);
+    const catalogExperts = spec?.num_experts ?? 0;
+    const hfExperts = (hfConfig?.num_experts as number) ??
+      (hfConfig?.num_local_experts as number) ?? 0;
+    const isMoe = catalogExperts > 1 || hfExperts > 1;
+
     return {
       model_path: model || '(select model)',
       system: gpu || '(select GPU)',
@@ -652,6 +669,11 @@ export default function QuickEstimate() {
       ...(testWeightPrecision === 'NVFP4' && { gemm_quant_mode: 'nvfp4' }),
       ...(testKVCachePrecision === 'FP8' && { kvcache_quant_mode: 'fp8' }),
       ...(testKVCachePrecision === 'NVFP4' && { kvcache_quant_mode: 'nvfp4' }),
+      hf_model_config: needsHfConfig(model, aicModels)
+        ? (hfConfig as Record<string, unknown> | null)
+        : null,
+      moe_quant_mode: isMoe ? testMoeQuantMode : undefined,
+      ...(isMoe && { moe_ep_size: testTpSize }),
       ...(servingMode === 'disagg' && {
         mode: 'disagg',
         prefill_tp_size: parsePerfPhase(prefillCfg).tp,
@@ -664,7 +686,7 @@ export default function QuickEstimate() {
         decode_batch_size: parsePerfPhase(decodeCfg).batch,
       })
     };
-  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, currentAicGpu, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision, servingMode, prefillCfg, decodeCfg]);
+  }, [model, gpu, inferenceBackend, testISL, testOSL, testConcurrentUsers, testResult, testTpSize, testPpSize, currentAicGpu, testPrefix, backendVersion, testWeightPrecision, testKVCachePrecision, servingMode, prefillCfg, decodeCfg, modelSpecs, hfConfig, aicModels, testMoeQuantMode]);
 
   // Copy API request body to clipboard
   const handleCopyAPIRequest = async () => {
