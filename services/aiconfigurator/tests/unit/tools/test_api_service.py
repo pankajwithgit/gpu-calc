@@ -497,6 +497,7 @@ class TestModels:
 
 class TestSystems:
 
+    @patch.dict("tools.api_service.app._DEVICE_DISPLAY_NAMES", {"h200_sxm": "NVIDIA H200 SXM", "a100_sxm": "NVIDIA A100-SXM4-80GB"})
     @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm", "a100_sxm"})
     def test_returns_sorted_objects(self):
         resp = client.get("/systems")
@@ -524,6 +525,7 @@ class TestSystems:
         assert sys["tdp_watts"] == 700.0
         assert sys["gpus_per_node"] == 8
 
+    @patch.dict("tools.api_service.app._DEVICE_DISPLAY_NAMES", {"h200_sxm": "NVIDIA H200 SXM"})
     @patch("tools.api_service.app.load_system_spec")
     @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_include_specs_bandwidth_and_tflops(self, mock_spec):
@@ -533,6 +535,7 @@ class TestSystems:
         assert sys["memory_bandwidth_bytes"] == 4800000000000
         assert abs(sys["bf16_tflops"] - 989.0) < 0.1
 
+    @patch.dict("tools.api_service.app._DEVICE_DISPLAY_NAMES", {"h200_sxm": "NVIDIA H200 SXM"})
     @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_no_include_omits_specs(self):
         resp = client.get("/systems")
@@ -540,6 +543,7 @@ class TestSystems:
         assert "vendor" not in sys
         assert "memory_bytes" not in sys
 
+    @patch.dict("tools.api_service.app._DEVICE_DISPLAY_NAMES", {"h200_sxm": "NVIDIA H200 SXM"})
     @patch("tools.api_service.app.load_system_spec")
     @patch("tools.api_service.app.supported_systems", lambda: {"h200_sxm"})
     def test_spec_failure_still_returns_entry(self, mock_spec):
@@ -605,6 +609,17 @@ def _skip_if_missing_perf_data(resp) -> None:
     reason="aiconfigurator SDK not installed or missing perf data",
 )
 class TestIntegration:
+
+    @classmethod
+    def setup_class(cls):
+        from configiq.systems import load_device_names_from_perf_data
+
+        import tools.api_service.app as _app_mod
+        device_names = load_device_names_from_perf_data()
+        if not device_names:
+            pytest.skip("device display names unavailable")
+        _app_mod._DEVICE_DISPLAY_NAMES = device_names
+        _app_mod._DEVICE_NAMES_LOADED = True
 
     def test_recommend_real(self):
         resp = client.post("/recommend", json={

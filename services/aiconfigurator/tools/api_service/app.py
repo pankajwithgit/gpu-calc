@@ -320,6 +320,7 @@ _SM_ARCHITECTURE = {
     89: "ada-lovelace",
     90: "hopper",
     100: "blackwell",
+    103: "blackwell",
     120: "blackwell",
 }
 
@@ -544,13 +545,17 @@ def _common_error_handler(e: Exception, op: str, model_path: str, backend: str, 
 
 
 def _architecture_from_sm(sm_version: int) -> str:
-    return _SM_ARCHITECTURE.get(sm_version, f"sm_{sm_version}")
+    sm_arch = _SM_ARCHITECTURE.get(sm_version, f"sm_{sm_version}")
+    if sm_arch == f"sm_{sm_version}":
+        return "Other"
+    return sm_arch
 
 
 # Cache of system_id -> vendor device name, populated at startup from the
 # aiconfigurator SDK (via configiq.systems). aicostings loads the same map from
 # the same source so the two services never drift on GPU naming.
 _DEVICE_DISPLAY_NAMES: dict[str, str] = {}
+_DEVICE_NAMES_LOADED: bool = False
 
 
 def _parse_include(include: str | None) -> set[str]:
@@ -592,8 +597,9 @@ else:
 @app.on_event("startup")
 def startup_event():
     """Load GPU display names from the aiconfigurator SDK at startup."""
-    global _DEVICE_DISPLAY_NAMES
+    global _DEVICE_DISPLAY_NAMES, _DEVICE_NAMES_LOADED
     _DEVICE_DISPLAY_NAMES = load_device_names_from_perf_data()
+    _DEVICE_NAMES_LOADED = bool(_DEVICE_DISPLAY_NAMES)
 
 
 @app.post("/recommend")
@@ -928,9 +934,14 @@ def get_systems(
 
     systems = []
     for sys_id in sorted(supported_systems()):
+        device_name = _DEVICE_DISPLAY_NAMES.get(sys_id)
+        if device_name is None:
+            if _DEVICE_NAMES_LOADED:
+                continue
+            device_name = sys_id
         entry: dict[str, Any] = {
             "id": sys_id,
-            "name": _DEVICE_DISPLAY_NAMES.get(sys_id, sys_id),
+            "name": device_name,
         }
         if want_specs:
             try:
@@ -938,9 +949,14 @@ def get_systems(
                 gpu = spec.get("gpu", {})
                 node = spec.get("node", {})
                 sm = int(gpu.get("sm_version", 0))
+                sm_arch = _architecture_from_sm(sm)
+                if sm_arch == "Other":
+                    vendor_name = ""
+                else:
+                    vendor_name = "nvidia"
                 entry.update({
-                    "vendor": "nvidia",
-                    "architecture": _architecture_from_sm(sm),
+                    "vendor": vendor_name,
+                    "architecture": sm_arch,
                     "memory_bytes": int(gpu.get("mem_capacity", 0)),
                     "memory_bandwidth_bytes": int(gpu.get("mem_bw", 0)),
                     "bf16_tflops": float(gpu.get("bfloat16_tc_flops", 0)) / 1e12,
