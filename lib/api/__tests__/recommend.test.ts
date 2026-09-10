@@ -154,7 +154,7 @@ describe('callRecommend', () => {
     expect(r.throughput.tokensPerSecond).toBe(846.93)
     expect(r.throughput.tokensPerSecondPerGpu).toBe(211.73)
     expect(r.throughput.tokensPerSecondPerUser).toBe(6.67)
-    expect(r.memory).toEqual({ value: 58.61, unit: 'GB', scope: 'unspecified' })
+    expect(r.memory).toEqual({ value: 58.61, unit: 'GB' })
     expect(r.metadata.modelPath).toBe('meta-llama/Llama-3.1-70B-Instruct')
     expect(r.metadata.system).toBe('h200_sxm')
     expect(r.metadata.durationMs).toBeGreaterThanOrEqual(0)
