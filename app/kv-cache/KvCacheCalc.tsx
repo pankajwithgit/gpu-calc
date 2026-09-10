@@ -25,6 +25,41 @@ const BREAKDOWN_COLORS: Record<string, string> = {
   comm: '#009596',
 }
 
+/** Parallelism inputs for one disagg pool (string-backed, parsed at calc time). */
+interface PhaseParallelInput {
+  tp: string
+  pp: string
+  moeTp: string
+  moeEp: string
+}
+
+/** A computed KV-cache result tagged with its pool label ('' for agg). */
+interface PhaseResult {
+  label: string
+  result: KvCacheCalcResult
+}
+
+/** Parallelism fields sent to /api/memory for one pool. */
+interface PhaseParallel {
+  tp: number
+  pp: number
+  moeTp: number
+  moeEp: number
+}
+
+function parsePhaseParallel(p: PhaseParallelInput): PhaseParallel {
+  return {
+    tp: Math.max(1, parseInt(p.tp, 10) || 1),
+    pp: Math.max(1, parseInt(p.pp, 10) || 1),
+    moeTp: parseInt(p.moeTp, 10) || 0,
+    moeEp: parseInt(p.moeEp, 10) || 0,
+  }
+}
+
+function invalidPhaseParallel(p: PhaseParallelInput): boolean {
+  return p.tp === '' || parseInt(p.tp, 10) < 1 || p.pp === '' || parseInt(p.pp, 10) < 1
+}
+
 export default function KvCacheCalc() {
   const { hydrated, hfToken, defaultModel: settingsDefaultModel, inferenceBackend, backendVersion: settingsBackendVersion } = useSettings()
   const { modelOptions: aicModels, gpuOptions: aicGpus, isLoading: catalogLoading } = useAicCatalog()
@@ -53,16 +88,19 @@ export default function KvCacheCalc() {
   const [ppSize, setPpSize] = React.useState(1)
   const [moeTpSize, setMoeTpSize] = React.useState('')
   const [moeEpSize, setMoeEpSize] = React.useState('')
+  // Disagg: prefill and decode pools have independent parallelism.
+  const [servingMode, setServingMode] = React.useState<'agg' | 'disagg'>('agg')
+  const [prefillPar, setPrefillPar] = React.useState<PhaseParallelInput>({ tp: '1', pp: '1', moeTp: '', moeEp: '' })
+  const [decodePar, setDecodePar] = React.useState<PhaseParallelInput>({ tp: '1', pp: '1', moeTp: '', moeEp: '' })
   const [memFractionKind, setMemFractionKind] = React.useState('of_total')
   const [memFractionValue, setMemFractionValue] = React.useState(1.0)
   const [advancedOpen, setAdvancedOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
-  const [result, setResult] = React.useState<KvCacheCalcResult | null>(null)
+  const [results, setResults] = React.useState<PhaseResult[]>([])
   const [error, setError] = React.useState<string | null>(null)
-  const [flipped, setFlipped] = React.useState<Record<string, boolean>>({})
   const [debugOpen, setDebugOpen] = React.useState(false)
-  const [debugRequest, setDebugRequest] = React.useState<Record<string, unknown> | null>(null)
-  const [debugResponse, setDebugResponse] = React.useState<Record<string, unknown> | null>(null)
+  const [debugRequest, setDebugRequest] = React.useState<unknown>(null)
+  const [debugResponse, setDebugResponse] = React.useState<unknown>(null)
   const [debugStatus, setDebugStatus] = React.useState<number | null>(null)
   const [debugDuration, setDebugDuration] = React.useState<number | null>(null)
 
@@ -77,6 +115,9 @@ export default function KvCacheCalc() {
   const invalidTpSize = tpSizeInput === '' || parseInt(tpSizeInput, 10) < 1;
   const invalidPpSize = ppSizeInput === '' || parseInt(ppSizeInput, 10) < 1;
   const invalidMemFractionValue = memFractionValueInput === '' || !Number.isFinite(Number(memFractionValueInput)) || Number(memFractionValueInput) < 0 || Number(memFractionValueInput) > 1;
+  const invalidParallelism = servingMode === 'disagg'
+    ? invalidPhaseParallel(prefillPar) || invalidPhaseParallel(decodePar)
+    : invalidTpSize || invalidPpSize;
 
   const handleMaxNumTokensChange = (raw: string) => {
     const digits = raw.replace(/[^0-9]/g, '');
@@ -140,29 +181,42 @@ export default function KvCacheCalc() {
     : catalogLoading ? 'fetching'
     : model ? 'idle' : 'idle'
 
-  async function handleCalculate() {
-    setLoading(true)
-    setError(null)
-    setResult(null)
-
-    const requestBody: Record<string, unknown> = {
+  function buildRequestBody(par: PhaseParallel): Record<string, unknown> {
+    const body: Record<string, unknown> = {
       model_path: model,
       system,
       backend,
       max_num_tokens: maxNumTokens,
       max_batch_size: maxBatchSize,
-      tp_size: tpSize,
-      pp_size: ppSize,
+      tp_size: par.tp,
+      pp_size: par.pp,
       memory_fraction_kind: memFractionKind,
       memory_fraction_value: memFractionValue,
     }
-    if (backendVersion.trim()) requestBody.backend_version = backendVersion.trim()
-    if (needsHfConfig(model, aicModels) && hfConfig) requestBody.model_config = hfConfig
-    const moeTp = parseInt(moeTpSize, 10)
-    if (!isNaN(moeTp) && moeTp > 0) requestBody.moe_tp_size = moeTp
-    const moeEp = parseInt(moeEpSize, 10)
-    if (!isNaN(moeEp) && moeEp > 0) requestBody.moe_ep_size = moeEp
-    setDebugRequest(requestBody)
+    if (backendVersion.trim()) body.backend_version = backendVersion.trim()
+    if (needsHfConfig(model, aicModels) && hfConfig) body.model_config = hfConfig
+    if (par.moeTp > 0) body.moe_tp_size = par.moeTp
+    if (par.moeEp > 0) body.moe_ep_size = par.moeEp
+    return body
+  }
+
+  async function handleCalculate() {
+    setLoading(true)
+    setError(null)
+    setResults([])
+
+    // One request per pool. Agg is a single unlabelled pool; disagg fans out to
+    // prefill + decode, each with its own parallelism, against the same /memory
+    // endpoint (which already takes tp/pp/moe dims).
+    const phases: { label: string; par: PhaseParallel }[] = servingMode === 'disagg'
+      ? [
+          { label: 'Prefill', par: parsePhaseParallel(prefillPar) },
+          { label: 'Decode', par: parsePhaseParallel(decodePar) },
+        ]
+      : [{ label: '', par: { tp: tpSize, pp: ppSize, moeTp: parseInt(moeTpSize, 10) || 0, moeEp: parseInt(moeEpSize, 10) || 0 } }]
+
+    const requestBodies = phases.map(ph => ({ label: ph.label, body: buildRequestBody(ph.par) }))
+    setDebugRequest(servingMode === 'disagg' ? requestBodies : requestBodies[0].body)
     setDebugResponse(null)
     setDebugStatus(null)
     setDebugDuration(null)
@@ -170,23 +224,29 @@ export default function KvCacheCalc() {
     const t0 = performance.now()
 
     try {
-      const res = await fetch('/api/memory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      })
+      const responses = await Promise.all(
+        requestBodies.map(async ({ label, body }) => {
+          const res = await fetch('/api/memory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          const data = await res.json()
+          return { label, status: res.status, data }
+        }),
+      )
 
-      const data = await res.json()
-      setDebugResponse(data)
-      setDebugStatus(res.status)
+      setDebugResponse(servingMode === 'disagg' ? responses.map(r => r.data) : responses[0].data)
+      setDebugStatus(responses[responses.length - 1].status)
       setDebugDuration(Math.round(performance.now() - t0))
 
-      if (data.status === 'failed') {
-        setError(data.error?.message ?? 'An unexpected error occurred')
+      const failed = responses.find(r => r.data?.status === 'failed')
+      if (failed) {
+        setError(failed.data.error?.message ?? 'An unexpected error occurred')
         return
       }
 
-      setResult(data as KvCacheCalcResult)
+      setResults(responses.map(r => ({ label: r.label, result: r.data as KvCacheCalcResult })))
     } catch {
       setDebugDuration(Math.round(performance.now() - t0))
       setError('Failed to connect to the server. Please try again.')
@@ -194,15 +254,6 @@ export default function KvCacheCalc() {
       setLoading(false)
     }
   }
-
-  function toggleFlip(id: string) {
-    setFlipped(prev => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  const animKv = useCountUp(result?.kvCache.totalBytes ?? 0, 800)
-  const animPerToken = useCountUp(result?.kvCache.perTokenBytes ?? 0, 800)
-  const animTokens = useCountUp(result?.kvCache.totalTokens ?? 0, 800)
-  const animGpuCap = useCountUp(result?.gpuCapacity.totalBytes ?? 0, 800)
 
   return (
     <div className={styles.page}>
@@ -237,7 +288,7 @@ export default function KvCacheCalc() {
             type="button"
             className={styles.calcBtn}
             onClick={handleCalculate} 
-            disabled={loading || !model.trim() || invalidMaxNumTokens || invalidMaxBatchSize || invalidTpSize || invalidPpSize || invalidMemFractionValue}
+            disabled={loading || !model.trim() || invalidMaxNumTokens || invalidMaxBatchSize || invalidParallelism || invalidMemFractionValue}
           >
             {loading ? 'Calculating…' : 'Calculate'}
           </button>
@@ -254,7 +305,10 @@ export default function KvCacheCalc() {
           Advanced settings
           {!advancedOpen && (
             <span className={styles.advancedSummary}>
-              {backend}{backendVersion ? ` v${backendVersion}` : ''} · tokens: {maxNumTokens.toLocaleString()} · batch: {maxBatchSize} · TP {tpSize}{ppSize > 1 ? ` · PP ${ppSize}` : ''}{moeTpSize ? ` · MoE TP ${moeTpSize}` : ''}
+              {backend}{backendVersion ? ` v${backendVersion}` : ''} · tokens: {maxNumTokens.toLocaleString()} · batch: {maxBatchSize}
+              {servingMode === 'disagg'
+                ? ` · disagg · P: TP ${prefillPar.tp}/PP ${prefillPar.pp} · D: TP ${decodePar.tp}/PP ${decodePar.pp}`
+                : ` · TP ${tpSize}${ppSize > 1 ? ` · PP ${ppSize}` : ''}${moeTpSize ? ` · MoE TP ${moeTpSize}` : ''}`}
             </span>
           )}
         </button>
@@ -310,54 +364,82 @@ export default function KvCacheCalc() {
               </div>
             </div>
 
+            {/* Serving mode */}
+            <div className={styles.advancedSectionLabel}>Serving mode</div>
+            <div className={styles.modeToggle}>
+              <button
+                type="button"
+                className={`${styles.modeButton} ${servingMode === 'agg' ? styles.modeButtonActive : ''}`}
+                onClick={() => setServingMode('agg')}
+                aria-pressed={servingMode === 'agg'}
+              >
+                Aggregated
+              </button>
+              <button
+                type="button"
+                className={`${styles.modeButton} ${servingMode === 'disagg' ? styles.modeButtonActive : ''}`}
+                onClick={() => setServingMode('disagg')}
+                aria-pressed={servingMode === 'disagg'}
+              >
+                Disaggregated
+              </button>
+            </div>
+
             {/* Parallelism */}
             <div className={styles.advancedSectionLabel}>Parallelism</div>
-            <div className={styles.advancedRow4}>
-              <div className={styles.field}>
-                <label htmlFor="kv-tp" className={styles.fieldLabel}>TP size</label>
-                <input
-                  type="number"
-                  id="kv-tp"
-                  value={tpSizeInput}
-                  onChange={e => handleTpSizeChange(e.target.value)}
-                  min={1}
-                  className={invalidTpSize ? styles.paramInputInvalid : styles.numberInput}
-                />
+            {servingMode === 'agg' ? (
+              <div className={styles.advancedRow4}>
+                <div className={styles.field}>
+                  <label htmlFor="kv-tp" className={styles.fieldLabel}>TP size</label>
+                  <input
+                    type="number"
+                    id="kv-tp"
+                    value={tpSizeInput}
+                    onChange={e => handleTpSizeChange(e.target.value)}
+                    min={1}
+                    className={invalidTpSize ? styles.paramInputInvalid : styles.numberInput}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="kv-pp" className={styles.fieldLabel}>PP size</label>
+                  <input
+                    type="number"
+                    id="kv-pp"
+                    value={ppSizeInput}
+                    onChange={e => handlePpSizeChange(e.target.value)}
+                    min={1}
+                    className={invalidPpSize ? styles.paramInputInvalid : styles.numberInput}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="kv-moe-tp" className={styles.fieldLabel}>MoE TP size</label>
+                  <input
+                    type="text"
+                    id="kv-moe-tp"
+                    value={moeTpSize}
+                    onChange={e => setMoeTpSize(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="auto"
+                    className={styles.numberInput}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="kv-moe-ep" className={styles.fieldLabel}>MoE EP size</label>
+                  <input
+                    type="text"
+                    id="kv-moe-ep"
+                    value={moeEpSize}
+                    onChange={e => setMoeEpSize(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="auto"
+                    className={styles.numberInput}
+                  />
+                </div>
               </div>
-              <div className={styles.field}>
-                <label htmlFor="kv-pp" className={styles.fieldLabel}>PP size</label>
-                <input
-                  type="number"
-                  id="kv-pp"
-                  value={ppSizeInput}
-                  onChange={e => handlePpSizeChange(e.target.value)}
-                  min={1}
-                  className={invalidPpSize ? styles.paramInputInvalid : styles.numberInput}
-                />
-              </div>
-              <div className={styles.field}>
-                <label htmlFor="kv-moe-tp" className={styles.fieldLabel}>MoE TP size</label>
-                <input
-                  type="text"
-                  id="kv-moe-tp"
-                  value={moeTpSize}
-                  onChange={e => setMoeTpSize(e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="auto"
-                  className={styles.numberInput}
-                />
-              </div>
-              <div className={styles.field}>
-                <label htmlFor="kv-moe-ep" className={styles.fieldLabel}>MoE EP size</label>
-                <input
-                  type="text"
-                  id="kv-moe-ep"
-                  value={moeEpSize}
-                  onChange={e => setMoeEpSize(e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="auto"
-                  className={styles.numberInput}
-                />
-              </div>
-            </div>
+            ) : (
+              <>
+                <PhaseParallelFields title="Prefill pool" par={prefillPar} onChange={setPrefillPar} idPrefix="kv-p" />
+                <PhaseParallelFields title="Decode pool" par={decodePar} onChange={setDecodePar} idPrefix="kv-d" />
+              </>
+            )}
 
             {/* Memory */}
             <div className={styles.advancedSectionLabel}>Memory</div>
@@ -417,111 +499,19 @@ export default function KvCacheCalc() {
       )}
 
       {/* Placeholder */}
-      {!loading && !result && !error}
+      {!loading && results.length === 0 && !error}
 
-      {/* Results */}
-      {result && !loading && (
+      {/* Results — one section per pool (agg = single unlabelled pool) */}
+      {results.length > 0 && !loading && (
         <>
-          {/* Tiles */}
-          <div className={styles.tilesGrid}>
-            {/* Total KV cache */}
-            <TileCard
-              id="total"
-              dark
-              label="Available for KV cache / GPU"
-              value={formatBytes(animKv)}
-              sub={`${result.kvCache.totalTokens.toLocaleString()} tokens capacity`}
-              flipped={flipped.total ?? false}
-              onFlip={() => toggleFlip('total')}
-              backContent={
-                <>
-                  <div className={styles.backTitle}>KV cache / GPU detail</div>
-                  <BackRow label="Raw bytes" value={result.kvCache.totalBytes.toLocaleString()} dark />
-                  <BackRow label="Total tokens" value={result.kvCache.totalTokens.toLocaleString()} dark />
-                  <BackRow label="Per token" value={`${result.kvCache.perTokenBytes.toLocaleString()} B`} dark />
-                  <BackRow label="Source" value={result.metadata.source} dark />
-                </>
-              }
-            />
-
-            {/* Per token */}
-            <TileCard
-              id="pertoken"
-              label="Per token"
-              value={formatBytes(animPerToken)}
-              sub="KV cache memory per token"
-              flipped={flipped.pertoken ?? false}
-              onFlip={() => toggleFlip('pertoken')}
-              backContent={
-                <>
-                  <div className={styles.backTitle}>Per-token detail</div>
-                  <BackRow label="Bytes/token" value={result.kvCache.perTokenBytes.toLocaleString()} />
-                  <BackRow label="Total tokens" value={result.kvCache.totalTokens.toLocaleString()} />
-                </>
-              }
-            />
-
-            {/* Token capacity */}
-            <TileCard
-              id="tokens"
-              label="Token capacity"
-              value={animTokens.toLocaleString()}
-              sub="Max tokens in KV cache"
-              flipped={flipped.tokens ?? false}
-              onFlip={() => toggleFlip('tokens')}
-              backContent={
-                <>
-                  <div className={styles.backTitle}>Capacity detail</div>
-                  <BackRow label="Total tokens" value={result.kvCache.totalTokens.toLocaleString()} />
-                  <BackRow label="KV size" value={formatBytes(result.kvCache.totalBytes)} />
-                  <BackRow label="Per token" value={`${result.kvCache.perTokenBytes.toLocaleString()} B`} />
-                </>
-              }
-            />
-
-            {/* GPU capacity */}
-            <TileCard
-              id="gpu"
-              label="GPU memory"
-              value={formatBytes(animGpuCap)}
-              sub={`${result.metadata.system} total capacity`}
-              flipped={flipped.gpu ?? false}
-              onFlip={() => toggleFlip('gpu')}
-              backContent={
-                <>
-                  <div className={styles.backTitle}>GPU memory detail</div>
-                  <BackRow label="Total GPU" value={formatBytes(result.gpuCapacity.totalBytes)} />
-                  <BackRow label="KV cache" value={formatBytes(result.kvCache.totalBytes)} />
-                  <BackRow label="KV % of GPU" value={`${((result.kvCache.totalBytes / result.gpuCapacity.totalBytes) * 100).toFixed(1)}%`} />
-                </>
-              }
-            />
-          </div>
-
-          {/* Memory breakdown bar */}
-          <MemoryBreakdownSection result={result} />
-
-          {/* Metadata */}
-          <div className={styles.configSection}>
-            <div className={styles.configTitle}>Request details</div>
-            <div className={styles.configGrid}>
-              <ConfigItem label="Model" value={result.metadata.modelPath} />
-              <ConfigItem label="Backend" value={result.metadata.backendVersion ? `${result.metadata.backend} v${result.metadata.backendVersion}` : result.metadata.backend} />
-              <ConfigItem label="GPU system" value={result.metadata.system} />
-              <ConfigItem label="Max tokens" value={result.metadata.maxNumTokens.toLocaleString()} />
-              <ConfigItem label="Batch size" value={result.metadata.maxBatchSize.toLocaleString()} />
-              <ConfigItem label="TP / PP" value={`${result.metadata.tpSize} / ${result.metadata.ppSize}`} />
-              {result.metadata.moeTpSize != null && <ConfigItem label="MoE TP" value={String(result.metadata.moeTpSize)} />}
-              {result.metadata.moeEpSize != null && <ConfigItem label="MoE EP" value={String(result.metadata.moeEpSize)} />}
-              <ConfigItem label="Mem fraction" value={`${result.metadata.memoryFractionValue} (${result.metadata.memoryFractionKind})`} />
-              <ConfigItem label="Source" value={result.metadata.source} />
-            </div>
-          </div>
+          {results.map(({ label, result }) => (
+            <PhaseResults key={label || 'agg'} label={label} result={result} />
+          ))}
         </>
       )}
 
       {/* Debug panel */}
-      {(debugRequest || debugResponse) && (
+      {(debugRequest != null || debugResponse != null) && (
         <div className={styles.debugSection}>
           <button
             type="button"
@@ -566,6 +556,163 @@ export default function KvCacheCalc() {
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
+
+/** Four inputs (TP/PP/MoE TP/MoE EP) for one disagg pool. */
+function PhaseParallelFields({ title, par, onChange, idPrefix }: {
+  title: string
+  par: PhaseParallelInput
+  onChange: (p: PhaseParallelInput) => void
+  idPrefix: string
+}) {
+  const digits = (v: string) => v.replace(/[^0-9]/g, '')
+  const invalidTp = par.tp === '' || parseInt(par.tp, 10) < 1
+  const invalidPp = par.pp === '' || parseInt(par.pp, 10) < 1
+  return (
+    <>
+      <div className={styles.phaseFieldsLabel}>{title}</div>
+      <div className={styles.advancedRow4}>
+        <div className={styles.field}>
+          <label htmlFor={`${idPrefix}-tp`} className={styles.fieldLabel}>TP size</label>
+          <input
+            type="number" id={`${idPrefix}-tp`} value={par.tp} min={1}
+            onChange={e => onChange({ ...par, tp: digits(e.target.value) })}
+            className={invalidTp ? styles.paramInputInvalid : styles.numberInput}
+          />
+        </div>
+        <div className={styles.field}>
+          <label htmlFor={`${idPrefix}-pp`} className={styles.fieldLabel}>PP size</label>
+          <input
+            type="number" id={`${idPrefix}-pp`} value={par.pp} min={1}
+            onChange={e => onChange({ ...par, pp: digits(e.target.value) })}
+            className={invalidPp ? styles.paramInputInvalid : styles.numberInput}
+          />
+        </div>
+        <div className={styles.field}>
+          <label htmlFor={`${idPrefix}-moe-tp`} className={styles.fieldLabel}>MoE TP size</label>
+          <input
+            type="text" id={`${idPrefix}-moe-tp`} value={par.moeTp} placeholder="auto"
+            onChange={e => onChange({ ...par, moeTp: digits(e.target.value) })}
+            className={styles.numberInput}
+          />
+        </div>
+        <div className={styles.field}>
+          <label htmlFor={`${idPrefix}-moe-ep`} className={styles.fieldLabel}>MoE EP size</label>
+          <input
+            type="text" id={`${idPrefix}-moe-ep`} value={par.moeEp} placeholder="auto"
+            onChange={e => onChange({ ...par, moeEp: digits(e.target.value) })}
+            className={styles.numberInput}
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
+/** Full result rendering for one pool: tiles + memory breakdown + request detail. */
+function PhaseResults({ label, result }: PhaseResult) {
+  const [flipped, setFlipped] = React.useState<Record<string, boolean>>({})
+  const toggleFlip = (id: string) => setFlipped(prev => ({ ...prev, [id]: !prev[id] }))
+
+  const animKv = useCountUp(result.kvCache.totalBytes, 800)
+  const animPerToken = useCountUp(result.kvCache.perTokenBytes, 800)
+  const animTokens = useCountUp(result.kvCache.totalTokens, 800)
+  const animGpuCap = useCountUp(result.gpuCapacity.totalBytes, 800)
+
+  return (
+    <div className={styles.phaseBlock}>
+      {label && <div className={styles.phaseTitle}>{label}</div>}
+
+      <div className={styles.tilesGrid}>
+        <TileCard
+          id="total"
+          dark
+          label="Available for KV cache / GPU"
+          value={formatBytes(animKv)}
+          sub={`${result.kvCache.totalTokens.toLocaleString()} tokens capacity`}
+          flipped={flipped.total ?? false}
+          onFlip={() => toggleFlip('total')}
+          backContent={
+            <>
+              <div className={styles.backTitle}>KV cache / GPU detail</div>
+              <BackRow label="Raw bytes" value={result.kvCache.totalBytes.toLocaleString()} dark />
+              <BackRow label="Total tokens" value={result.kvCache.totalTokens.toLocaleString()} dark />
+              <BackRow label="Per token" value={`${result.kvCache.perTokenBytes.toLocaleString()} B`} dark />
+              <BackRow label="Source" value={result.metadata.source} dark />
+            </>
+          }
+        />
+
+        <TileCard
+          id="pertoken"
+          label="Per token"
+          value={formatBytes(animPerToken)}
+          sub="KV cache memory per token"
+          flipped={flipped.pertoken ?? false}
+          onFlip={() => toggleFlip('pertoken')}
+          backContent={
+            <>
+              <div className={styles.backTitle}>Per-token detail</div>
+              <BackRow label="Bytes/token" value={result.kvCache.perTokenBytes.toLocaleString()} />
+              <BackRow label="Total tokens" value={result.kvCache.totalTokens.toLocaleString()} />
+            </>
+          }
+        />
+
+        <TileCard
+          id="tokens"
+          label="Token capacity"
+          value={animTokens.toLocaleString()}
+          sub="Max tokens in KV cache"
+          flipped={flipped.tokens ?? false}
+          onFlip={() => toggleFlip('tokens')}
+          backContent={
+            <>
+              <div className={styles.backTitle}>Capacity detail</div>
+              <BackRow label="Total tokens" value={result.kvCache.totalTokens.toLocaleString()} />
+              <BackRow label="KV size" value={formatBytes(result.kvCache.totalBytes)} />
+              <BackRow label="Per token" value={`${result.kvCache.perTokenBytes.toLocaleString()} B`} />
+            </>
+          }
+        />
+
+        <TileCard
+          id="gpu"
+          label="GPU memory"
+          value={formatBytes(animGpuCap)}
+          sub={`${result.metadata.system} total capacity`}
+          flipped={flipped.gpu ?? false}
+          onFlip={() => toggleFlip('gpu')}
+          backContent={
+            <>
+              <div className={styles.backTitle}>GPU memory detail</div>
+              <BackRow label="Total GPU" value={formatBytes(result.gpuCapacity.totalBytes)} />
+              <BackRow label="KV cache" value={formatBytes(result.kvCache.totalBytes)} />
+              <BackRow label="KV % of GPU" value={`${((result.kvCache.totalBytes / result.gpuCapacity.totalBytes) * 100).toFixed(1)}%`} />
+            </>
+          }
+        />
+      </div>
+
+      <MemoryBreakdownSection result={result} />
+
+      <div className={styles.configSection}>
+        <div className={styles.configTitle}>Request details{label ? ` — ${label}` : ''}</div>
+        <div className={styles.configGrid}>
+          <ConfigItem label="Model" value={result.metadata.modelPath} />
+          <ConfigItem label="Backend" value={result.metadata.backendVersion ? `${result.metadata.backend} v${result.metadata.backendVersion}` : result.metadata.backend} />
+          <ConfigItem label="GPU system" value={result.metadata.system} />
+          <ConfigItem label="Max tokens" value={result.metadata.maxNumTokens.toLocaleString()} />
+          <ConfigItem label="Batch size" value={result.metadata.maxBatchSize.toLocaleString()} />
+          <ConfigItem label="TP / PP" value={`${result.metadata.tpSize} / ${result.metadata.ppSize}`} />
+          {result.metadata.moeTpSize != null && <ConfigItem label="MoE TP" value={String(result.metadata.moeTpSize)} />}
+          {result.metadata.moeEpSize != null && <ConfigItem label="MoE EP" value={String(result.metadata.moeEpSize)} />}
+          <ConfigItem label="Mem fraction" value={`${result.metadata.memoryFractionValue} (${result.metadata.memoryFractionKind})`} />
+          <ConfigItem label="Source" value={result.metadata.source} />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface TileCardProps {
   id: string

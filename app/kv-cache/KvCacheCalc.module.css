@@ -203,6 +203,52 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
+/* ---------- serving-mode toggle ---------- */
+.modeToggle {
+  display: inline-flex;
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.modeButton {
+  padding: 7px 18px;
+  border: none;
+  background: #ffffff;
+  color: var(--t2);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modeButton + .modeButton { border-left: 1px solid var(--line2); }
+.modeButton:hover:not(.modeButtonActive) { background: var(--bg2, #f5f5f5); }
+.modeButtonActive {
+  background: var(--blue);
+  color: #ffffff;
+}
+
+/* ---------- per-phase parallelism label ---------- */
+.phaseFieldsLabel {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t2);
+  margin: 12px 0 6px;
+}
+
+/* ---------- per-pool result block (disagg) ---------- */
+.phaseBlock { margin-bottom: 28px; }
+.phaseTitle {
+  font-family: var(--display, var(--sans));
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--t);
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--line);
+}
+
 @media (max-width: 900px) {
   .advancedRow4 { grid-template-columns: 1fr 1fr; }
 }
