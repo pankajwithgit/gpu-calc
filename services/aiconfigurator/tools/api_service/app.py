@@ -143,9 +143,11 @@ class WorkerConfig(BaseModel):
     tp: int | None = None
     pp: int | None = None
     dp: int | None = None
+    cp: int | None = None
     moe_tp: int | None = None
     moe_ep: int | None = None
     num_workers: int | None = None
+    batch_size: int | None = None
     memory_gb: float | None = None
     gemm: str | None = None
     kvcache: str | None = None
@@ -167,6 +169,7 @@ class RecommendConfig(BaseModel):
     moe_tp: int | None = None
     moe_ep: int | None = None
     cp: int | None = None
+    bs: int | None = None
     ttft: float | None = None
     tpot: float | None = None
     request_latency: float | None = None
@@ -285,7 +288,7 @@ _COLUMN_MAP = {
 
 _INT_FIELDS = frozenset({
     "total_gpus_needed", "replicas_needed", "num_total_gpus",
-    "tp", "pp", "dp", "moe_tp", "moe_ep", "cp", "concurrency",
+    "tp", "pp", "dp", "moe_tp", "moe_ep", "cp", "bs", "concurrency",
 })
 
 _SM_ARCHITECTURE = {
@@ -371,9 +374,11 @@ def _worker_config_from_row(row: pd.Series, prefix: str, req: RecommendRequest) 
         tp=tp,
         pp=_coerce_int(g("pp")),
         dp=_coerce_int(g("dp")),
+        cp=_coerce_int(g("cp")),
         moe_tp=_coerce_int(g("moe_tp")),
         moe_ep=_coerce_int(g("moe_ep")),
         num_workers=_coerce_int(g("workers")),
+        batch_size=_coerce_int(g("bs")),
         memory_gb=_coerce_float(g("memory")),
         gemm=g("gemm"),
         kvcache=g("kvcache"),
@@ -409,10 +414,20 @@ def _row_to_config(row: pd.Series, req: RecommendRequest) -> RecommendConfig:
         cfg.prefill_config = _worker_config_from_row(row, "p", req)
         cfg.decode_config = _worker_config_from_row(row, "d", req)
         if cfg.memory is None:
-            p_mem = _coerce_float(row.get("(p)memory"))
-            d_mem = _coerce_float(row.get("(d)memory"))
-            if p_mem is not None or d_mem is not None:
-                cfg.memory = (p_mem or 0.0) + (d_mem or 0.0)
+            # (p)/(d)/(e)memory are each per-GPU peak usage (GB) for that worker
+            # type — each is checked against a single GPU's capacity, so they are
+            # NOT additive. The meaningful single figure is the worst-case
+            # per-GPU across all pools (prefill, decode, and encode).
+            phase_mems = [
+                m for m in (
+                    _coerce_float(row.get("(p)memory")),
+                    _coerce_float(row.get("(d)memory")),
+                    _coerce_float(row.get("(e)memory")),
+                )
+                if m is not None
+            ]
+            if phase_mems:
+                cfg.memory = max(phase_mems)
 
     return cfg
 

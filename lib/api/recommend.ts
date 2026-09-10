@@ -7,16 +7,53 @@ interface RecommendWarning {
   message: string
 }
 
+export type ServingMode = 'agg' | 'disagg'
+
+/**
+ * One worker role in a disaggregated deployment (prefill / decode / encode).
+ * `gpusPerWorker` = tp·pp·dp for dense models, or etp·ep·pp for MoE models
+ * (see the aiconfigurator replica math). A replica's GPU count is the sum of
+ * `workers × gpusPerWorker` across all phases.
+ */
+export interface PhaseConfig {
+  workers: number
+  gpusPerWorker: number
+  tensorParallelSize: number
+  pipelineParallelSize: number
+  dataParallelSize: number
+  contextParallelSize: number
+  moeTensorParallelSize: number | null
+  moeExpertParallelSize: number | null
+  batchSize: number | null
+  memoryGb: number | null
+}
+
 export interface RecommendResult {
   requestId: string
   status: 'completed'
+  /** Serving mode the recommender chose. Disagg splits prefill/decode pools. */
+  mode: ServingMode
   recommendation: {
+    /** Aggregate total GPUs across all replicas and pools. */
     gpusNeeded: number
+    /** GPUs in one replica (the smallest scalable unit). */
+    gpusPerReplica: number
+    /** GPUs per worker (agg). Equals gpusPerReplica for disagg. */
     totalGpus: number
     replicasNeeded: number
     tensorParallelSize: number
     pipelineParallelSize: number
     dataParallelSize: number
+    contextParallelSize: number
+    moeTensorParallelSize: number | null
+    moeExpertParallelSize: number | null
+    batchSize: number | null
+  }
+  /** Per-phase pools (disagg only; all null for agg). Encode is future-ready. */
+  phases: {
+    prefill: PhaseConfig | null
+    decode: PhaseConfig | null
+    encode: PhaseConfig | null
   }
   performance: {
     ttftLatencyMs: number
@@ -30,9 +67,9 @@ export interface RecommendResult {
     tokensPerSecondPerUser: number
   }
   memory: {
+    /** Worst-case peak memory usage per GPU (GB). Checked against one GPU's HBM. */
     value: number
     unit: 'GB'
-    scope: 'unspecified'
   }
   metadata: {
     modelPath: string
@@ -60,6 +97,65 @@ export type RecommendResponse = RecommendResult | RecommendErrorResponse
 
 export function generateRequestId(): string {
   return 'size_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+}
+
+// ─── Phase (disagg worker) parsing ───────────────────────────────────────────
+
+/** Shape of a WorkerConfig as returned by the AIConfigurator gateway. */
+interface RawWorkerConfig {
+  tp?: number | null
+  pp?: number | null
+  dp?: number | null
+  cp?: number | null
+  moe_tp?: number | null
+  moe_ep?: number | null
+  num_workers?: number | null
+  batch_size?: number | null
+  memory_gb?: number | null
+}
+
+/**
+ * True when the model uses expert parallelism. Dense models report moe_tp/moe_ep
+ * as null or 1; a value > 1 on either dimension means the experts are split.
+ * Used only for labelling (EP/ETP) — NOT for the GPU-count math, where MoE
+ * expert dims are laid out within the tp×dp GPUs (they do not add GPUs).
+ */
+export function isMoeConfig(moeTp: number | null, moeEp: number | null): boolean {
+  return (moeTp != null && moeTp > 1) || (moeEp != null && moeEp > 1)
+}
+
+const dim = (v: number | null | undefined): number => (v != null && v > 0 ? v : 1)
+
+/**
+ * GPUs consumed by a single worker = tp·pp·dp·cp. This mirrors the
+ * aiconfigurator SDK's WORKER_GPU_DIMS = (tp, pp, dp, cp) exactly and applies to
+ * both dense and MoE models (for MoE, tp·pp·dp already equals etp·ep·pp; the
+ * expert dims do not multiply the GPU count). cp (context parallel) is included
+ * — omitting it undercounts prefill pools.
+ */
+function gpusPerWorker(tp: number, pp: number, dp: number, cp: number): number {
+  return tp * pp * dp * cp
+}
+
+/** Parse a gateway WorkerConfig into a PhaseConfig, or null if absent. */
+function parsePhase(raw: RawWorkerConfig | null | undefined): PhaseConfig | null {
+  if (!raw || raw.tp == null) return null
+  const tp = dim(raw.tp)
+  const pp = dim(raw.pp)
+  const dp = dim(raw.dp)
+  const cp = dim(raw.cp)
+  return {
+    workers: raw.num_workers ?? 1,
+    gpusPerWorker: gpusPerWorker(tp, pp, dp, cp),
+    tensorParallelSize: tp,
+    pipelineParallelSize: pp,
+    dataParallelSize: dp,
+    contextParallelSize: cp,
+    moeTensorParallelSize: raw.moe_tp ?? null,
+    moeExpertParallelSize: raw.moe_ep ?? null,
+    batchSize: raw.batch_size ?? null,
+    memoryGb: raw.memory_gb ?? null,
+  }
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -141,20 +237,43 @@ export async function callRecommend(
   }
 
   const best = configs[0]
+  const chosenMode = typeof rawData.chosen_mode === 'string' ? rawData.chosen_mode : 'agg'
+  const mode: ServingMode = chosenMode.startsWith('disagg') ? 'disagg' : 'agg'
+
   const totalGpusNeeded = (best.total_gpus_needed as number) ?? 0
-  const numTotalGpus = (best.num_total_gpus as number) ?? totalGpusNeeded
-  const tp = (best.tp as number) ?? 1
-  const pp = (best.pp as number) ?? 1
-  const dp = (best.dp as number) ?? 1
   const replicasNeeded = (best.replicas_needed as number) ?? 1
 
+  const prefill = parsePhase(best.prefill_config as RawWorkerConfig | undefined)
+  const decode = parsePhase(best.decode_config as RawWorkerConfig | undefined)
+  const encode = parsePhase(best.encode_config as RawWorkerConfig | undefined)
+
+  const tp = dim(best.tp as number | undefined)
+  const pp = dim(best.pp as number | undefined)
+  const dp = dim(best.dp as number | undefined)
+  const cp = dim(best.cp as number | undefined)
+  const moeTp = (best.moe_tp as number | null) ?? null
+  const moeEp = (best.moe_ep as number | null) ?? null
+  const batchSize = (best.bs as number | null) ?? null
+
   const warnings: RecommendWarning[] = []
-  const parallelismProduct = tp * pp * dp
-  if (parallelismProduct !== numTotalGpus) {
-    warnings.push({
-      code: 'GPU_TOPOLOGY_MISMATCH',
-      message: `Parallelism dimensions (TP=${tp} x PP=${pp} x DP=${dp} = ${parallelismProduct}) do not equal GPUs per worker (${numTotalGpus})`,
-    })
+  let gpusPerReplica: number
+  if (mode === 'disagg') {
+    // A replica is one prefill/decode(/encode) set: sum of workers × gpus/worker.
+    gpusPerReplica = [prefill, decode, encode].reduce(
+      (sum, phase) => sum + (phase ? phase.workers * phase.gpusPerWorker : 0),
+      0,
+    )
+  } else {
+    // Agg: gpus/replica == gpus/worker == num_total_gpus (tp·pp·dp·cp).
+    const numTotalGpus = (best.num_total_gpus as number) ?? gpusPerWorker(tp, pp, dp, cp)
+    gpusPerReplica = numTotalGpus
+    const parallelismProduct = gpusPerWorker(tp, pp, dp, cp)
+    if (parallelismProduct !== numTotalGpus) {
+      warnings.push({
+        code: 'GPU_TOPOLOGY_MISMATCH',
+        message: `Parallelism dimensions (TP=${tp} x PP=${pp} x DP=${dp} x CP=${cp} = ${parallelismProduct}) do not equal GPUs per worker (${numTotalGpus})`,
+      })
+    }
   }
 
   const durationMs = Math.round(performance.now() - startTime)
@@ -162,14 +281,21 @@ export async function callRecommend(
   return {
     requestId,
     status: 'completed',
+    mode,
     recommendation: {
       gpusNeeded: totalGpusNeeded,
-      totalGpus: numTotalGpus,
+      gpusPerReplica,
+      totalGpus: gpusPerReplica,
       replicasNeeded,
       tensorParallelSize: tp,
       pipelineParallelSize: pp,
       dataParallelSize: dp,
+      contextParallelSize: cp,
+      moeTensorParallelSize: moeTp,
+      moeExpertParallelSize: moeEp,
+      batchSize,
     },
+    phases: { prefill, decode, encode },
     performance: {
       ttftLatencyMs: (best.ttft as number) ?? 0,
       tpotMs: (best.tpot as number) ?? 0,
@@ -184,7 +310,6 @@ export async function callRecommend(
     memory: {
       value: (best.memory as number) ?? 0,
       unit: 'GB',
-      scope: 'unspecified',
     },
     metadata: {
       modelPath: request.model_path,

@@ -712,12 +712,14 @@ class TestRecommendDisagg:
             "seq/s": 8.992, "seq/s/gpu": 4.496,
             "tokens/s/user": 40.527, "power_w": 0.0,
             "(p)tp": np.int64(1), "(p)pp": np.int64(1), "(p)dp": np.int64(1),
+            "(p)cp": np.int64(1), "(p)bs": np.int64(1),
             "(p)workers": np.int64(1), "(p)memory": 64.9,
             "(p)gemm": "bfloat16", "(p)kvcache": "bfloat16",
             "(p)fmha": "bfloat16", "(p)moe": "bfloat16", "(p)comm": "half",
             "(p)version": "0.24.0",
-            "(d)tp": np.int64(1), "(d)pp": np.int64(1), "(d)dp": np.int64(1),
-            "(d)workers": np.int64(1), "(d)memory": 64.9,
+            "(d)tp": np.int64(4), "(d)pp": np.int64(1), "(d)dp": np.int64(1),
+            "(d)cp": np.int64(1), "(d)bs": np.int64(36),
+            "(d)workers": np.int64(1), "(d)memory": 70.1,
             "(d)gemm": "bfloat16", "(d)version": "0.24.0",
         }
         result = make_mock_cli_result([disagg_row])
@@ -734,9 +736,15 @@ class TestRecommendDisagg:
         assert cfg["prefill_config"] is not None
         assert cfg["decode_config"] is not None
         assert cfg["prefill_config"]["tp"] == 1
-        assert cfg["decode_config"]["tp"] == 1
+        assert cfg["decode_config"]["tp"] == 4
+        # Batch size and context parallel are surfaced per worker role.
+        assert cfg["prefill_config"]["batch_size"] == 1
+        assert cfg["decode_config"]["batch_size"] == 36
+        assert cfg["prefill_config"]["cp"] == 1
         assert cfg["total_gpus_needed"] == 6
-        assert cfg["memory"] == pytest.approx(129.8)
+        # Per-GPU peak memory is the worst-case across pools, NOT the sum
+        # (each (x)memory is checked against a single GPU's capacity).
+        assert cfg["memory"] == pytest.approx(70.1)
 
     @patch("tools.api_service.app.cli_recommend")
     def test_agg_result_has_no_prefill_decode(self, mock_recommend):

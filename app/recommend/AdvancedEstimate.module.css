@@ -273,6 +273,28 @@
 @media (max-width: 1100px) { .tilesGrid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px)  { .tilesGrid { grid-template-columns: 1fr; } }
 
+/* ---------- disagg phase tiles ---------- */
+.phaseSection { margin: -8px 0 24px; }
+.phaseHeading {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2);
+  margin-bottom: 12px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.phaseHeading span {
+  font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--t3);
+  font-size: 12px;
+}
+.phaseGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.phaseGrid > div { transition: opacity 200ms ease-out; }
+.phaseGrid:hover > div:not(:hover) { opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) {
+  .phaseGrid:hover > div:not(:hover) { opacity: 1; }
+}
+
 .flip {
   perspective: 1100px;
   cursor: pointer !important;

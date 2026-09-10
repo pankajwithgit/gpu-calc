@@ -16,6 +16,7 @@ import { InfoStrip, InfoStripAction } from '@/components/ui/InfoStrip';
 import styles from './AdvancedEstimate.module.css';
 import { fetchModelConfig } from '@/lib/huggingface/fetch-config';
 import { useRecommend } from '@/contexts/RecommendContext';
+import { isMoeConfig, type PhaseConfig } from '@/lib/api/recommend';
 import { useAicCatalog } from '@/lib/hooks/useAicCatalog';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useCostings, resolveCloudRate } from '@/lib/hooks/useCostings';
@@ -57,6 +58,74 @@ function FlipTile({ dark = false, front, back }: {
         <span className={styles.seeMath}>↻ flip back</span>
       </div>
     </div>
+  );
+}
+
+// ─── Phase (disagg pool) tile ────────────────────────────────────────────────
+
+/**
+ * Compact parallelism label for a worker/phase. Shows attention dims (TP/PP/DP)
+ * and, for MoE, expert dims separately — EP (moe_ep) and ETP (moe_tp).
+ */
+function parallelLabel(p: {
+  tensorParallelSize: number
+  pipelineParallelSize: number
+  dataParallelSize: number
+  contextParallelSize?: number
+  moeExpertParallelSize: number | null
+  moeTensorParallelSize: number | null
+}): string {
+  const parts = [`TP${p.tensorParallelSize}`, `PP${p.pipelineParallelSize}`];
+  if (p.dataParallelSize > 1) parts.push(`DP${p.dataParallelSize}`);
+  if (p.contextParallelSize != null && p.contextParallelSize > 1) parts.push(`CP${p.contextParallelSize}`);
+  if (isMoeConfig(p.moeTensorParallelSize, p.moeExpertParallelSize)) {
+    if (p.moeExpertParallelSize != null && p.moeExpertParallelSize > 1) parts.push(`EP${p.moeExpertParallelSize}`);
+    if (p.moeTensorParallelSize != null && p.moeTensorParallelSize > 1) parts.push(`ETP${p.moeTensorParallelSize}`);
+  }
+  return parts.join(' · ');
+}
+
+function PhaseTile({ name, icon, phase }: {
+  name: string; icon: React.ReactNode; phase: PhaseConfig;
+}) {
+  const poolGpus = phase.workers * phase.gpusPerWorker;
+  // gpus/worker dims that are > 1 (matches the SDK's tp·pp·dp·cp definition).
+  const gpwFactors = [
+    ['TP', phase.tensorParallelSize],
+    ['PP', phase.pipelineParallelSize],
+    ['DP', phase.dataParallelSize],
+    ['CP', phase.contextParallelSize],
+  ].filter(([, v]) => (v as number) > 1);
+  const gpwMath = gpwFactors.length > 0
+    ? gpwFactors.map(([, v]) => v).join(' × ')
+    : '1';
+  return (
+    <FlipTile
+      front={
+        <>
+          <span className={styles.tileLabel}>{icon} {name}</span>
+          <span className={styles.tileValue}>
+            {poolGpus}<span className={styles.tileUnit}>GPUs</span>
+          </span>
+          <span className={styles.tileSub}>
+            {phase.workers} worker{phase.workers === 1 ? '' : 's'} × {phase.gpusPerWorker} GPU/worker · {parallelLabel(phase)}
+            {phase.batchSize != null ? ` · bs ${phase.batchSize}` : ''}
+          </span>
+        </>
+      }
+      back={
+        <>
+          <div className={styles.backTitle}>{name} pool</div>
+          <div className={styles.formula}>
+            {parallelLabel(phase)}<br />
+            gpus/worker = {gpwMath} = <span className={styles.em}>{phase.gpusPerWorker}</span><br />
+            workers = <span className={styles.em}>{phase.workers}</span>
+            {phase.batchSize != null && <> · bs = <span className={styles.em}>{phase.batchSize}</span></>}<br />
+            pool = <span className={styles.em}>{phase.workers} × {phase.gpusPerWorker} = {poolGpus} GPUs</span>
+          </div>
+        </>
+      }
+    />
   );
 }
 
@@ -322,7 +391,9 @@ export default function AdvancedEstimate() {
     ? `${resolvedCloudRate.provider.replace('.', ' · ')} ${resolvedCloudRate.kind === 'spot' ? 'spot' : 'on-demand'}`
     : amortizedHwPerHour != null ? 'amortized hardware (5-year)'
     : '';
-  const numGpus = result?.recommendation.totalGpus ?? 0;
+  // Cost is for the whole deployment, so use the aggregate GPU total
+  // (replicas × gpus/replica), not per-replica/per-worker.
+  const numGpus = result?.recommendation.gpusNeeded ?? 0;
   const monthlyCost = pricePerHour != null ? numGpus * pricePerHour * HOURS_PER_MONTH : null;
 
   return (
@@ -515,25 +586,66 @@ export default function AdvancedEstimate() {
               dark
               front={
                 <>
-                  <span className={styles.tileLabel}><MicrochipIcon /> GPUs required</span>
+                  <span className={styles.tileLabel}>
+                    <MicrochipIcon /> GPUs required
+                    <Label isCompact color={result.mode === 'disagg' ? 'purple' : 'blue'} style={{ marginLeft: 'auto' }}>
+                      {result.mode === 'disagg' ? 'disagg' : 'agg'}
+                    </Label>
+                  </span>
                   <span className={styles.tileValue}>
                     {gpuCount}<span className={styles.tileUnit}>× {currentGpuOption.label}</span>
                   </span>
                   <span className={styles.tileSub}>
-                    TP {result.recommendation.tensorParallelSize} · PP {result.recommendation.pipelineParallelSize} · DP {result.recommendation.dataParallelSize} · {result.performance.concurrency} concurrent users
+                    {result.mode === 'disagg'
+                      ? `${result.recommendation.replicasNeeded} replicas × ${result.recommendation.gpusPerReplica} GPUs/replica · ${result.performance.concurrency} concurrent users`
+                      : `${parallelLabel(result.recommendation)} · ${result.performance.concurrency} concurrent users`}
                   </span>
                 </>
               }
               back={
-                <>
-                  <div className={styles.backTitle}>GPU topology</div>
-                  <div className={styles.formula}>
-                    tensor parallel = <span className={styles.em}>{result.recommendation.tensorParallelSize}</span><br />
-                    pipeline parallel = <span className={styles.em}>{result.recommendation.pipelineParallelSize}</span><br />
-                    data parallel = <span className={styles.em}>{result.recommendation.dataParallelSize}</span><br />
-                    total = TP×PP×DP = <span className={styles.em}>{result.recommendation.totalGpus} GPUs</span>
-                  </div>
-                </>
+                result.mode === 'disagg' ? (
+                  <>
+                    <div className={styles.backTitle}>Disagg topology (xPyD)</div>
+                    <div className={styles.formula}>
+                      {([
+                        ['prefill', result.phases.prefill],
+                        ['decode', result.phases.decode],
+                        ['encode', result.phases.encode],
+                      ] as const)
+                        .filter(([, p]) => p != null)
+                        .map(([label, p]) => (
+                          <React.Fragment key={label}>
+                            {label}: <span className={styles.em}>{p!.workers} × {p!.gpusPerWorker} = {p!.workers * p!.gpusPerWorker}</span> GPUs<br />
+                          </React.Fragment>
+                        ))}
+                      gpus/replica ={' '}
+                      <span className={styles.em}>
+                        {([result.phases.prefill, result.phases.decode, result.phases.encode]
+                          .filter((p): p is PhaseConfig => p != null)
+                          .map(p => p.workers * p.gpusPerWorker)
+                          .join(' + '))} = {result.recommendation.gpusPerReplica}
+                      </span><br />
+                      total = <span className={styles.em}>{result.recommendation.gpusPerReplica} × {result.recommendation.replicasNeeded} replicas = {result.recommendation.gpusNeeded} GPUs</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={styles.backTitle}>GPU topology</div>
+                    <div className={styles.formula}>
+                      tensor parallel = <span className={styles.em}>{result.recommendation.tensorParallelSize}</span><br />
+                      pipeline parallel = <span className={styles.em}>{result.recommendation.pipelineParallelSize}</span><br />
+                      data parallel = <span className={styles.em}>{result.recommendation.dataParallelSize}</span><br />
+                      {result.recommendation.contextParallelSize > 1 &&
+                        <>context parallel = <span className={styles.em}>{result.recommendation.contextParallelSize}</span><br /></>}
+                      {result.recommendation.moeExpertParallelSize != null && result.recommendation.moeExpertParallelSize > 1 &&
+                        <>expert parallel (EP) = <span className={styles.em}>{result.recommendation.moeExpertParallelSize}</span><br /></>}
+                      {result.recommendation.moeTensorParallelSize != null && result.recommendation.moeTensorParallelSize > 1 &&
+                        <>expert tensor parallel (ETP) = <span className={styles.em}>{result.recommendation.moeTensorParallelSize}</span><br /></>}
+                      gpus/worker = <span className={styles.em}>{result.recommendation.gpusPerReplica}</span><br />
+                      total = <span className={styles.em}>{result.recommendation.gpusPerReplica} × {result.recommendation.replicasNeeded} replicas = {result.recommendation.gpusNeeded} GPUs</span>
+                    </div>
+                  </>
+                )
               }
             />
 
@@ -593,29 +705,45 @@ export default function AdvancedEstimate() {
               }
             />
 
-            {/* Est. Memory */}
+            {/* Peak memory per GPU */}
             <FlipTile
               front={
                 <>
-                  <span className={styles.tileLabel}><MemoryIcon /> Est. memory</span>
+                  <span className={styles.tileLabel}><MemoryIcon /> Peak mem / GPU</span>
                   <span className={styles.tileValue}>
                     {memVal}<span className={styles.tileUnit}>GB</span>
                   </span>
                   <span className={styles.tileSub}>
-                    {result.recommendation.totalGpus === 1
-                      ? '1 GPU per model instance'
-                      : `${result.recommendation.totalGpus} GPUs per model instance`}
+                    {result.mode === 'disagg' ? 'worst case across pools' : 'peak usage per GPU'}
                   </span>
                 </>
               }
               back={
                 <>
-                  <div className={styles.backTitle}>Memory estimate</div>
+                  <div className={styles.backTitle}>Memory per GPU</div>
                   <div className={styles.formula}>
-                    memory: <span className={styles.em}>{result.memory.value.toFixed(1)} {result.memory.unit}</span><br />
-                    scope: <span className={styles.em}>{result.memory.scope}</span><br />
-                    GPUs: <span className={styles.em}>{result.recommendation.totalGpus}</span><br />
-                    ~{(result.memory.value / result.recommendation.totalGpus).toFixed(1)} GB/GPU
+                    {result.mode === 'disagg' ? (
+                      <>
+                        {([
+                          ['prefill', result.phases.prefill],
+                          ['decode', result.phases.decode],
+                          ['encode', result.phases.encode],
+                        ] as const)
+                          .filter(([, p]) => p != null && p.memoryGb != null)
+                          .map(([label, p]) => (
+                            <React.Fragment key={label}>
+                              {label}: <span className={styles.em}>{p!.memoryGb!.toFixed(1)} GB/GPU</span><br />
+                            </React.Fragment>
+                          ))}
+                        peak = <span className={styles.em}>{result.memory.value.toFixed(1)} GB/GPU</span> (worst case)
+                      </>
+                    ) : (
+                      <>
+                        peak usage = <span className={styles.em}>{result.memory.value.toFixed(1)} {result.memory.unit}</span> per GPU<br />
+                        checked against a single GPU&apos;s HBM<br />
+                        {result.recommendation.gpusPerReplica} GPUs per replica
+                      </>
+                    )}
                   </div>
                 </>
               }
@@ -649,6 +777,19 @@ export default function AdvancedEstimate() {
               />
             )}
           </div>
+
+          {result.mode === 'disagg' && (result.phases.prefill || result.phases.decode || result.phases.encode) && (
+            <div className={styles.phaseSection}>
+              <div className={styles.phaseHeading}>
+                Disaggregated pools <span>per replica — {result.recommendation.gpusPerReplica} GPUs</span>
+              </div>
+              <div className={styles.phaseGrid}>
+                {result.phases.prefill && <PhaseTile name="Prefill" icon={<MicrochipIcon />} phase={result.phases.prefill} />}
+                {result.phases.decode && <PhaseTile name="Decode" icon={<MicrochipIcon />} phase={result.phases.decode} />}
+                {result.phases.encode && <PhaseTile name="Encode" icon={<MicrochipIcon />} phase={result.phases.encode} />}
+              </div>
+            </div>
+          )}
 
           {costingsEnabled && monthlyCost == null && (
             <div className={styles.card} style={{ marginBottom: 24, fontSize: '13px', color: '#54585c' }}>
