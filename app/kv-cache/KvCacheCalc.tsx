@@ -370,7 +370,7 @@ export default function KvCacheCalc() {
               <button
                 type="button"
                 className={`${styles.modeButton} ${servingMode === 'agg' ? styles.modeButtonActive : ''}`}
-                onClick={() => setServingMode('agg')}
+                onClick={() => { setServingMode('agg'); setResults([]); }}
                 aria-pressed={servingMode === 'agg'}
               >
                 Aggregated
@@ -378,7 +378,7 @@ export default function KvCacheCalc() {
               <button
                 type="button"
                 className={`${styles.modeButton} ${servingMode === 'disagg' ? styles.modeButtonActive : ''}`}
-                onClick={() => setServingMode('disagg')}
+                onClick={() => { setServingMode('disagg'); setResults([]); }}
                 aria-pressed={servingMode === 'disagg'}
               >
                 Disaggregated

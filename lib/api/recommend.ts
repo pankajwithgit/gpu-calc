@@ -11,9 +11,9 @@ export type ServingMode = 'agg' | 'disagg'
 
 /**
  * One worker role in a disaggregated deployment (prefill / decode / encode).
- * `gpusPerWorker` = tp·pp·dp for dense models, or etp·ep·pp for MoE models
- * (see the aiconfigurator replica math). A replica's GPU count is the sum of
- * `workers × gpusPerWorker` across all phases.
+ * `gpusPerWorker` = tp·pp·dp·cp (the aiconfigurator WORKER_GPU_DIMS; for MoE this
+ * already equals etp·ep·pp — expert dims do not add GPUs). A replica's GPU count
+ * is the sum of `workers × gpusPerWorker` across all phases.
  */
 export interface PhaseConfig {
   workers: number
